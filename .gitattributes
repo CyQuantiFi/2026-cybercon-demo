@@ -1,0 +1,26 @@
+# Check out with LF everywhere, including on Windows.
+#
+# Without this, a Windows checkout converts every text file to CRLF and
+# `wrangler deploy` uploads those bytes, so what is served stops matching what
+# is in the repo — one extra byte per line across the whole app. It is benign
+# for HTML and CSS, but it breaks two things that are supposed to be checkable:
+# the prompt hash in `model-participant.mjs --check`, which compares the repo's
+# prompt against the artefact it produced, and any attempt to verify that what
+# the audience is being served is what was reviewed.
+#
+# There is no build step here — files go to Cloudflare exactly as checked out —
+# so the checkout is the deployment, and it needs to be byte-stable.
+* text=auto eol=lf
+
+# Binary. Must never be line-ending converted or they are corrupt on arrival.
+*.woff2 binary
+*.woff   binary
+*.ttf    binary
+*.otf    binary
+*.png    binary
+*.jpg    binary
+*.jpeg   binary
+*.gif    binary
+*.ico    binary
+*.pdf    binary
+*.pptx   binary
