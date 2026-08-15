@@ -101,9 +101,12 @@ Turnstile also needs its public half in `wrangler.jsonc` under
 ## Deploy
 
 ```bash
-npx wrangler kv namespace create AGG_KV     # paste the id into wrangler.jsonc
 npm run deploy
 ```
+
+The KV namespace already exists (`cybercon-2026-demo-AGG_KV`,
+`8d32bd288aa54ee29866461d9b17b56a`) and its id is in `wrangler.jsonc`. The
+Durable Object and its migration are created by the first deploy.
 
 Point a custom domain at it and make the QR target a short path — `/f` is
 already wired and answers without a redirect.

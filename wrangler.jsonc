@@ -25,9 +25,9 @@
   "kv_namespaces": [
     {
       "binding": "AGG_KV",
-      // Replace with the id printed by:
-      //   npx wrangler kv namespace create AGG_KV
-      "id": "REPLACE_WITH_KV_NAMESPACE_ID"
+      // Namespace "cybercon-2026-demo-AGG_KV". Not a secret — using it still
+      // requires account credentials.
+      "id": "8d32bd288aa54ee29866461d9b17b56a"
     }
   ],
 
