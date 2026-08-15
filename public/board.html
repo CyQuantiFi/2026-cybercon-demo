@@ -1,0 +1,168 @@
+<!doctype html>
+<html lang="en-AU">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=1920, initial-scale=1">
+<meta name="theme-color" content="#05050A">
+<meta name="robots" content="noindex">
+<title>Board — Experts as a Service</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 32 32%27%3E%3Ccircle cx=%2716%27 cy=%2716%27 r=%2712%27 fill=%27%23FF2FA0%27/%3E%3C/svg%3E">
+<link rel="preload" href="fonts/FunnelDisplay-latin.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="css/tokens.css">
+<link rel="stylesheet" href="css/board.css">
+</head>
+<body class="board">
+
+<div class="stage" id="stage">
+
+  <header class="topbar">
+    <div class="topbar__left">
+      <p class="eyebrow" id="liveFlag">Live now</p>
+      <h1 class="topbar__q" id="questionText"></h1>
+    </div>
+    <div class="topbar__right">
+      <p class="topbar__count num" id="count">0</p>
+      <p class="topbar__countLabel">forecasts in</p>
+      <p class="topbar__seed num" id="seedNote"></p>
+    </div>
+  </header>
+
+  <div class="panels">
+
+    <!-- PANEL A — THE CROWD -->
+    <section class="panel" id="panelA" data-panel="1">
+      <div class="panel__head">
+        <p class="marker">A</p>
+        <p class="eyebrow">The crowd</p>
+      </div>
+
+      <div class="panel__body crowd">
+        <div class="crowd__figures">
+          <div class="figure figure--hero">
+            <p class="figure__val num" id="crowdMedian">—</p>
+            <p class="figure__key">Median, extremised</p>
+          </div>
+          <div class="crowd__pair">
+            <div class="figure">
+              <p class="figure__val figure__val--sm num" id="crowdIqr">—</p>
+              <p class="figure__key">Interquartile range</p>
+            </div>
+            <div class="figure">
+              <p class="figure__val figure__val--sm num" id="crowdRaw">—</p>
+              <p class="figure__key">Before extremising</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="hist" id="hist" aria-hidden="true"></div>
+        <div class="hist__axis" aria-hidden="true"><span>1%</span><span>25%</span><span>50%</span><span>75%</span><span>99%</span></div>
+
+        <div class="reasons" id="crowdNotes"></div>
+      </div>
+    </section>
+
+    <!-- PANEL B — THE MODEL -->
+    <section class="panel" id="panelB" data-panel="2">
+      <div class="panel__head">
+        <p class="marker marker--cyan">B</p>
+        <p class="eyebrow eyebrow--cyan">The model</p>
+      </div>
+
+      <div class="panel__body model">
+        <!-- Presented as one more participant, visually identical to a crowd
+             entry. Shown side by side, never blended in silently. -->
+        <div class="participant">
+          <div class="participant__p num" id="modelP">—</div>
+          <p class="participant__role" id="modelName">LLM participant</p>
+          <p class="participant__base" id="modelBase">—</p>
+        </div>
+        <ul class="reasons reasons--model" id="modelReasons"></ul>
+        <p class="stamp" id="modelStamp"></p>
+      </div>
+    </section>
+
+    <!-- PANEL C — THE ENSEMBLE -->
+    <section class="panel" id="panelC" data-panel="3">
+      <div class="panel__head">
+        <p class="marker">C</p>
+        <p class="eyebrow">The ensemble</p>
+      </div>
+
+      <div class="panel__body ensemble">
+        <div class="figure figure--hero">
+          <p class="figure__val num" id="ensembleP">—</p>
+          <p class="figure__key">Crowd and model, combined</p>
+        </div>
+
+        <div class="band" id="band" aria-hidden="true">
+          <div class="band__track">
+            <div class="band__range" id="bandRange"></div>
+            <div class="band__tick band__tick--crowd" id="tickCrowd" title="Crowd"></div>
+            <div class="band__tick band__tick--model" id="tickModel" title="Model"></div>
+            <div class="band__tick band__tick--ens" id="tickEns" title="Ensemble"></div>
+          </div>
+          <div class="band__axis"><span>0%</span><span>50%</span><span>100%</span></div>
+          <div class="band__legend">
+            <span class="key key--pink">Crowd</span>
+            <span class="key key--cyan">Model</span>
+            <span class="key key--white">Ensemble</span>
+          </div>
+        </div>
+
+        <p class="diverge" id="divergence"></p>
+        <p class="weights" id="weights"></p>
+      </div>
+    </section>
+
+    <!-- PANEL D — THE MONEY -->
+    <section class="panel" id="panelD" data-panel="4">
+      <div class="panel__head">
+        <p class="marker">D</p>
+        <p class="eyebrow">The money</p>
+      </div>
+
+      <div class="panel__body money-panel">
+        <div class="money-figures">
+          <div class="figure figure--hero">
+            <p class="figure__val num" id="lossMean">—</p>
+            <p class="figure__key">Expected annual loss</p>
+          </div>
+          <div class="money-pair">
+            <div class="figure">
+              <p class="figure__val figure__val--sm num" id="lossP50">—</p>
+              <p class="figure__key">Median year</p>
+            </div>
+            <div class="figure">
+              <p class="figure__val figure__val--sm num" id="lossP90">—</p>
+              <p class="figure__key">90th percentile</p>
+            </div>
+          </div>
+        </div>
+
+        <p class="curve__ylabel">Chance a single year costs more than…</p>
+        <div class="curve-wrap">
+          <svg class="curve" id="curve" viewBox="0 0 640 220" preserveAspectRatio="none" aria-hidden="true"></svg>
+          <div class="curve__y" id="curveY" aria-hidden="true"></div>
+        </div>
+        <div class="curve__axis" id="curveAxis" aria-hidden="true"></div>
+
+        <p class="conditional" id="conditional"></p>
+        <p class="caveat">Illustrative — reference organisation, not your organisation.</p>
+      </div>
+    </section>
+
+  </div>
+
+  <footer class="botbar">
+    <p class="method" id="method"></p>
+    <p class="botbar__status" id="boardStatus"></p>
+  </footer>
+
+  <div class="hint-keys" id="hintKeys">
+    <span><b>→</b> reveal</span><span><b>1–4</b> jump</span><span><b>R</b> re-run model</span><span><b>S</b> snapshot</span>
+  </div>
+</div>
+
+<script type="module" src="js/board.js"></script>
+</body>
+</html>

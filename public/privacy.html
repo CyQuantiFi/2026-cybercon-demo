@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="en-AU">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#FFFFFF">
+<title>Privacy — CyQuantiFi CyberCon 2026 demo</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 32 32%27%3E%3Ccircle cx=%2716%27 cy=%2716%27 r=%2712%27 fill=%27%23FF2FA0%27/%3E%3C/svg%3E">
+<link rel="preload" href="fonts/FunnelDisplay-latin.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="css/tokens.css">
+<style>
+/* The document surface: the deck's light content slides, not its dark moment
+   slides. A privacy policy is something you read, not something you watch. */
+body {
+  background: var(--paper);
+  color: var(--ink);
+  font-size: 17px;
+  line-height: 1.6;
+}
+.wrap { max-width: 680px; margin: 0 auto; padding: 40px 22px 80px; }
+.eyebrow { font-size: 12px; }
+h1 { font-size: 38px; font-weight: 700; letter-spacing: var(--track-headline); line-height: 1.08; margin: 14px 0 10px; }
+h2 { font-size: 15px; font-weight: 700; text-transform: uppercase; letter-spacing: var(--track-eyebrow); color: var(--muted); margin: 40px 0 0; }
+.lede { font-size: 20px; color: var(--muted); margin: 0 0 8px; }
+hr { border: 0; border-top: 1px solid var(--rule); margin: 22px 0; }
+p, li { color: var(--muted); }
+h2 + p, h2 + ul { margin-top: 10px; }
+strong { color: var(--ink); font-weight: 700; }
+a { color: var(--pink-deep); }
+ul { padding-left: 20px; }
+li { margin: 8px 0; }
+.callout { background: var(--paper-pink); border-left: 3px solid var(--pink); padding: 16px 18px; margin: 24px 0; }
+.callout p { margin: 0; color: var(--ink); font-size: 15.5px; }
+.back { display: inline-block; margin-top: 40px; font-weight: 700; color: var(--pink-deep); }
+.meta { font-size: 13px; color: var(--dim); }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <p class="eyebrow">CyQuantiFi · CyberCon 2026</p>
+  <h1>What we collect, and what we do with it</h1>
+  <p class="lede">Your forecast is anonymous. Your email is optional. Those two sentences are the whole policy; the rest is detail.</p>
+  <hr>
+
+  <h2>Who is collecting this</h2>
+  <p><strong>CyQuantiFi</strong> is the collecting entity. Reach us about anything on this page at <a href="mailto:privacy@cyquantifi.com">privacy@cyquantifi.com</a>.</p>
+
+  <h2>What the forecast itself contains</h2>
+  <p>A probability, optionally a cost range, a one-line rationale, a self-rated confidence, and a broad role category. No name, no company name, no email, no account.</p>
+  <p>Each submission carries a random identifier generated on your own device so that a retry after a dropped connection is not counted twice, and so you can change your answer instead of voting again. It is not linked to you.</p>
+
+  <h2>The email field</h2>
+  <p>The email address is the only personal information we collect, and it is the only part of this page that needed writing.</p>
+  <ul>
+    <li><strong>It is optional.</strong> The forecast submits without it, and it is already saved before you are ever shown the field. It never gates seeing the results.</li>
+    <li><strong>It is not stored with your forecast.</strong> It is written to a separate table that the presenter board cannot read, so nothing about you can appear on a screen in front of a room.</li>
+    <li><strong>Consent is not bundled.</strong> Being told how the question resolved and receiving other CyQuantiFi updates are two separate boxes. Both start unticked. Marketing requires the second box; ticking the first does not imply it.</li>
+    <li><strong>We record which version of the notice you agreed to</strong>, so we can show you exactly what you consented to.</li>
+    <li>Every email we send carries a working unsubscribe. One click unsubscribes, and on request also deletes.</li>
+  </ul>
+
+  <h2>Where it is processed</h2>
+  <p>This application runs on <strong>Cloudflare</strong> infrastructure, which may be located outside Australia. Submitting a forecast means your submission is processed there.</p>
+  <p>If you ask to be told how the question resolved, that notice will be sent using a third-party mail provider, which may also be located outside Australia.</p>
+  <p class="meta">The mail provider is named here once it is selected, before any notice is sent. If you would rather not have your address handled outside Australia, do not give us one — your forecast still counts.</p>
+
+  <h2>How long we keep it</h2>
+  <p>Your email is destroyed once the resolution notice has been sent, unless you ticked the second box. Forecasts themselves are anonymous and are kept as part of the scoring record.</p>
+
+  <h2>Security</h2>
+  <p>Encrypted in transit and at rest. Access is limited to the founder.</p>
+
+  <h2>Access, correction and deletion</h2>
+  <p>Write to <a href="mailto:privacy@cyquantifi.com">privacy@cyquantifi.com</a> and we will give you access to what we hold, correct it, or delete it. We answer within 30 days.</p>
+  <p>Because forecasts carry no identifier that links to you, we can act on the email address; we generally cannot find your individual forecast to delete it, which is a consequence of the anonymity rather than a limit on your rights.</p>
+
+  <div class="callout">
+    <p>This demo exists to make one claim visible: structured crowd judgement plus a model produces a defensible loss distribution for an asset with no telemetry. It is a demonstration instrument, not a product, and it is not collecting anything it does not need to make that point.</p>
+  </div>
+
+  <a class="back" href="/">← Back to the forecast</a>
+</div>
+</body>
+</html>

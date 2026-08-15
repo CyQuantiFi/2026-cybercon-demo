@@ -1,0 +1,31 @@
+{
+  "_comment": [
+    "Twenty forecasts from the pre-conference panel round (§9, 'Nobody scans').",
+    "The board labels these as pre-seeded, so the histogram is never empty and",
+    "n=1 still produces something worth looking at. Replace this file with the",
+    "real dry-run data a week out — it doubles as the offline snapshot.",
+    "Notes arrive pre-approved because this round was vetted before the talk."
+  ],
+  "forecasts": [
+    { "id": "5e0d0001-0000-4000-8000-000000000001", "q1": 0.88, "q2": { "low": 400000, "mode": 1500000, "high": 9000000 }, "confidence": "high", "role": "leadership", "note": "Three separate edge appliances hit KEV in the last eighteen months. The base rate alone gets you most of the way there." },
+    { "id": "5e0d0002-0000-4000-8000-000000000002", "q1": 0.82, "q2": { "low": 250000, "mode": 900000, "high": 6000000 }, "confidence": "high", "role": "risk", "note": "The binding constraint is public attribution, not exploitation. Plenty happens that nobody names." },
+    { "id": "5e0d0003-0000-4000-8000-000000000003", "q1": 0.93, "q2": { "low": 600000, "mode": 2200000, "high": 14000000 }, "confidence": "med", "role": "engineering", "note": "Two years is a long window and OAIC reporting has been getting more specific, not less." },
+    { "id": "5e0d0004-0000-4000-8000-000000000004", "q1": 0.75, "q2": { "low": 200000, "mode": 750000, "high": 4000000 }, "confidence": "med", "role": "vendor", "note": null },
+    { "id": "5e0d0005-0000-4000-8000-000000000005", "q1": 0.45, "q2": { "low": 150000, "mode": 500000, "high": 3000000 }, "confidence": "low", "role": "risk", "note": "Everyone is anchoring on exploitation. The question asks for a named Australian victim, and that pairing is genuinely rarer than it feels." },
+    { "id": "5e0d0006-0000-4000-8000-000000000006", "q1": 0.9, "q2": { "low": 500000, "mode": 1800000, "high": 11000000 }, "confidence": "high", "role": "leadership", "note": "ASD advisories have named sectors before. It only takes one ASX-listed disclosure to resolve this." },
+    { "id": "5e0d0007-0000-4000-8000-000000000007", "q1": 0.78, "q2": { "low": 300000, "mode": 1100000, "high": 7000000 }, "confidence": "med", "role": "engineering", "note": "Edge devices are where the unpatchable stuff lives. Nobody reboots the VPN concentrator." },
+    { "id": "5e0d0008-0000-4000-8000-000000000008", "q1": 0.85, "q2": { "low": 350000, "mode": 1400000, "high": 8000000 }, "confidence": "med", "role": "risk", "note": null },
+    { "id": "5e0d0009-0000-4000-8000-000000000009", "q1": 0.62, "q2": { "low": 180000, "mode": 600000, "high": 3500000 }, "confidence": "low", "role": "other", "note": "Attribution is the hard part. Australian organisations disclose the breach and stay quiet about the vector." },
+    { "id": "5e0d0010-0000-4000-8000-000000000010", "q1": 0.95, "q2": { "low": 700000, "mode": 2500000, "high": 18000000 }, "confidence": "high", "role": "engineering", "note": "I would take the other side of anything under 90% here." },
+    { "id": "5e0d0011-0000-4000-8000-000000000011", "q1": 0.8, "q2": { "low": 300000, "mode": 1000000, "high": 6500000 }, "confidence": "med", "role": "leadership", "note": null },
+    { "id": "5e0d0012-0000-4000-8000-000000000012", "q1": 0.7, "q2": { "low": 220000, "mode": 800000, "high": 5000000 }, "confidence": "med", "role": "vendor", "note": "Vendor disclosure timelines are the rate limiter, and they are slow by design." },
+    { "id": "5e0d0013-0000-4000-8000-000000000013", "q1": 0.35, "q2": { "low": 120000, "mode": 450000, "high": 2500000 }, "confidence": "low", "role": "other", "note": "Reading the ambiguity rule closely, endpoint agents are excluded and that removes most of what I was thinking of." },
+    { "id": "5e0d0014-0000-4000-8000-000000000014", "q1": 0.86, "q2": { "low": 450000, "mode": 1600000, "high": 10000000 }, "confidence": "high", "role": "risk", "note": null },
+    { "id": "5e0d0015-0000-4000-8000-000000000015", "q1": 0.91, "q2": { "low": 550000, "mode": 2000000, "high": 12000000 }, "confidence": "med", "role": "leadership", "note": "Two independent news reports is a low bar. This resolves on a quiet Tuesday and nobody notices." },
+    { "id": "5e0d0016-0000-4000-8000-000000000016", "q1": 0.72, "q2": { "low": 260000, "mode": 950000, "high": 5500000 }, "confidence": "med", "role": "engineering", "note": null },
+    { "id": "5e0d0017-0000-4000-8000-000000000017", "q1": 0.99, "q2": { "low": 900000, "mode": 3500000, "high": 30000000 }, "confidence": "high", "role": "vendor", "note": "It has probably already happened and we are waiting on the paperwork." },
+    { "id": "5e0d0018-0000-4000-8000-000000000018", "q1": 0.68, "q2": { "low": 200000, "mode": 700000, "high": 4500000 }, "confidence": "low", "role": "other", "note": null },
+    { "id": "5e0d0019-0000-4000-8000-000000000019", "q1": 0.84, "q2": { "low": 380000, "mode": 1300000, "high": 8500000 }, "confidence": "med", "role": "risk", "note": "Worth separating 'will happen' from 'will be publicly documented in a way that satisfies this wording'. The second is the forecast." },
+    { "id": "5e0d0020-0000-4000-8000-000000000020", "q1": 0.58, "q2": { "low": 160000, "mode": 550000, "high": 3200000 }, "confidence": "low", "role": "engineering", "note": null }
+  ]
+}

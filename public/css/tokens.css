@@ -1,0 +1,149 @@
+/* ---------------------------------------------------------------------------
+   CyQuantiFi design tokens
+   Extracted from __S_Keogh__Presentation__1.0.pptx so the app and the deck are
+   visibly the same object. Every value below appears literally in the slide
+   XML; nothing here is invented.
+
+   The deck runs two surfaces:
+     - dark  (#05050A) for moment and section slides — slide 3 "LIVE NOW",
+       which is the slide the audience scans from. The app lives here.
+     - light (#FFFFFF, #101014 ink) for content slides. Kept for the privacy
+       page, which is a document rather than a moment.
+--------------------------------------------------------------------------- */
+
+@font-face {
+  font-family: 'Funnel Display';
+  font-style: normal;
+  font-weight: 300 800;
+  font-display: swap;
+  /* Self-hosted, not fetched from Google. The venue Wi-Fi is expected to be
+     hostile and §5 rules out third-party scripts. 17KB, latin only. */
+  src: url('../fonts/FunnelDisplay-latin.woff2') format('woff2');
+}
+
+:root {
+  /* --- ink and ground ------------------------------------------------- */
+  --ink: #101014;
+  --ink-deep: #05050A;
+  --surface: #2A2A33;
+
+  /* --- paper ---------------------------------------------------------- */
+  --paper: #FFFFFF;
+  --paper-tint: #FAFAFB;
+  --paper-pink: #FFF5FA;
+
+  /* --- structure ------------------------------------------------------ */
+  --rule: #E4E4EA;
+
+  /* --- secondary text, light to dark ---------------------------------- */
+  --muted: #4A4A55;
+  --muted-2: #6A6A75;
+  --muted-3: #7A7A85;
+  --dim: #8A8A95;
+  --dim-2: #B6B6C0;
+
+  /* --- accents --------------------------------------------------------
+     Semantics fixed across the app so the board reads without a legend:
+       pink  = the crowd, anything live, and the money
+       cyan  = the model, and question inputs
+       paper = the ensemble (the thing crowd and model resolve into)      */
+  --pink: #FF2FA0;
+  --pink-deep: #C2166F;
+  --cyan: #29C8FF;
+  --cyan-deep: #0E7FA8;
+
+  /* --- roles on the dark surface -------------------------------------- */
+  --bg: var(--ink-deep);
+  --fg: var(--paper);
+  --fg-2: #E4E4EA;
+  --fg-3: var(--dim-2);
+  --fg-4: var(--muted-3);
+  --hairline: rgba(228, 228, 234, 0.14);
+  --hairline-strong: rgba(228, 228, 234, 0.28);
+
+  /* --- type ------------------------------------------------------------
+     Funnel Display everywhere, as in the deck. Arial is the deck's own
+     declared fallback.                                                   */
+  --font: 'Funnel Display', Arial, system-ui, sans-serif;
+
+  /* Tracking, read off the slide XML: eyebrows open right up, headlines
+     tighten slightly. */
+  --track-eyebrow: 0.18em;
+  --track-headline: -0.02em;
+}
+
+/* ---------------------------------------------------------------------------
+   Primitives shared by the participant app, the board and the moderation view.
+--------------------------------------------------------------------------- */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--font);
+  font-weight: 400;
+  -webkit-font-smoothing: antialiased;
+  -webkit-text-size-adjust: 100%;
+}
+
+/* The deck's signature label: uppercase, heavy, wide-tracked, pink. */
+.eyebrow {
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: var(--track-eyebrow);
+  color: var(--pink);
+  margin: 0;
+}
+
+.eyebrow--cyan {
+  color: var(--cyan);
+}
+
+.headline {
+  font-weight: 700;
+  letter-spacing: var(--track-headline);
+  line-height: 1.06;
+  margin: 0;
+}
+
+/* Pink numerals as row markers — the deck never uses boxes or shadows for
+   structure, only hairline rules and these. */
+.marker {
+  font-weight: 700;
+  color: var(--pink);
+  font-variant-numeric: tabular-nums;
+}
+
+.rule {
+  border: 0;
+  border-top: 1px solid var(--hairline);
+  margin: 0;
+}
+
+/* Tabular figures anywhere a number changes in place, so digits do not jitter
+   while the board is polling. */
+.num {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: 'tnum' 1;
+}
+
+:focus-visible {
+  outline: 2px solid var(--cyan);
+  outline-offset: 3px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+}
