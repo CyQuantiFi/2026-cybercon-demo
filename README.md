@@ -153,10 +153,17 @@ node scripts/score.mjs --export dump.json --outcome yes
 ```
 
 Writes Brier and log scores per forecaster, the benchmark table, a recipient
-list deduplicated by address, and a rendered outcome notice. **The send path is
-deliberately unwired** — choosing a mail provider means naming it in the APP 8
-disclosure in `public/privacy.html` first. This step is what turns a demo into a
-track record; it is the only part of this repo that matters in a year.
+list deduplicated by address, and a rendered outcome notice quoting the question
+and its resolution source verbatim.
+
+**Send it by hand from Gmail** — paste the notice as a mail merge against
+`recipients.csv`. There is no automated send, on purpose: at ~150 recipients it
+is one mail merge, and a script holding Gmail credentials pointed at an address
+list is a much larger thing to secure than this demo warrants. Check the
+account's daily recipient cap first (2,000/day on Workspace, 500/day consumer).
+
+This step is what turns a demo into a track record; it is the only part of this
+repo that matters in a year.
 
 ## Privacy
 
@@ -170,16 +177,27 @@ written afterwards:
   The aggregate the board polls has no field that could hold personal
   information — there is a test that asserts this and it should stay passing.
 - Two separate unticked boxes. Marketing needs its own tick; bundled consent is
-  not consent. The exact notice version is stored with the consent.
+  not consent. The exact notice version is stored with the consent — currently
+  `v2`. **Bump it in `public/data/questions.json` whenever the notice wording
+  changes**, or the field stops proving what anyone actually agreed to. A
+  submission that arrives without a version is recorded as `unknown` rather
+  than being assigned one.
 - The collection notice is inline above the field, with the policy linked from
   the notice itself.
 - `?include=contacts` is required to export addresses at all, so the routine
   export carries none.
 
+**APP 8 — overseas disclosure.** Two processors are named, in both the inline
+notice and the policy: Cloudflare, which runs the app, and **Gmail (Google LLC)**,
+which sends the outcome notice. Both sit outside Australia. If the mail provider
+ever changes, both places need updating and the notice version needs bumping.
+
+**Unsubscribe** is by reply rather than by one-click link, because these notices
+come from a mailbox rather than a bulk mailing platform. The policy says so
+plainly rather than promising a mechanism that does not exist.
+
 **Not legal advice.** The wording in `public/privacy.html` and the inline notice
-ship as specified and need review before the conference — particularly the APP 8
-overseas-disclosure statement, which also needs the mail provider named once one
-is chosen.
+still needs review before the conference.
 
 ## Layout
 

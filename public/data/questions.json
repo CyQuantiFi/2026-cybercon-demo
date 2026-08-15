@@ -1,6 +1,6 @@
 {
   "session": "cybercon-2026",
-  "noticeVersion": "v1",
+  "noticeVersion": "v2",
 
   "_comment": [
     "Check both questions the week of the talk. If Q1 has already resolved,",
@@ -92,8 +92,8 @@
     "entity": "CyQuantiFi",
     "contact": "privacy@cyquantifi.com",
     "policyUrl": "/privacy",
-    "noticeVersion": "v1",
-    "notice": "Your forecast is anonymous. Giving us your email is optional and it is not stored with your forecast. CyQuantiFi collects it only to do what you tick below. We handle it under the Australian Privacy Principles; it is processed on Cloudflare infrastructure that may be located outside Australia. You can ask us to give you access to it, correct it or delete it at any time at privacy@cyquantifi.com.",
+    "noticeVersion": "v2",
+    "notice": "Your forecast is anonymous. Giving us your email is optional and it is not stored with your forecast. CyQuantiFi collects it only to do what you tick below. We handle it under the Australian Privacy Principles; it is processed on Cloudflare infrastructure that may be located outside Australia, and the outcome notice is sent using Gmail (Google LLC), also outside Australia. You can ask us to give you access to it, correct it or delete it at any time at privacy@cyquantifi.com.",
     "consents": [
       { "key": "outcome", "label": "Tell me how this question resolved" },
       { "key": "marketing", "label": "Send me other CyQuantiFi updates, including product and marketing" }

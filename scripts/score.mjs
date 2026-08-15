@@ -11,15 +11,25 @@
    Where dump.json comes from:
        curl -H "x-mod-token: $MOD_TOKEN" https://your.domain/api/mod/export > dump.json
 
-   Emails are deliberately NOT wired to a provider. This script renders the
-   outcome notice and writes the recipient list; choosing the provider is a
-   decision with an APP 8 disclosure attached, so it is made once, named in the
-   privacy notice, and only then plugged in here.
+   The notices go out from a CyQuantiFi mailbox on Gmail, which is named in the
+   APP 8 disclosure in public/privacy.html and in the inline collection notice.
+
+   Sending is still done by hand rather than by this script: at ~150 recipients
+   it is one mail merge, and a script holding Gmail credentials to bulk-send to
+   an address list is a much larger thing to secure than the demo warrants.
+   What this writes is the notice text and a deduplicated recipient list.
+
+   Before sending, check the Gmail account's daily recipient cap — 2,000/day on
+   Workspace, 500/day on a consumer account. A conference room fits inside
+   both, a mailing list would not.
 --------------------------------------------------------------------------- */
 
 import { readFile, writeFile, mkdir } from 'node:fs/promises';
-import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { dirname, join } from 'node:path';
 import { aggregateCrowd, clampP } from '../public/js/aggregate.js';
+
+const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 
 const argv = process.argv.slice(2);
 const flag = (name, fallback = null) => {
@@ -38,6 +48,11 @@ if (!exportPath || !['yes', 'no'].includes(outcomeRaw)) {
 
 const outcome = outcomeRaw === 'yes' ? 1 : 0;
 const dump = JSON.parse(await readFile(exportPath, 'utf8'));
+
+// Quote the question back verbatim from the question set rather than asking
+// whoever runs this a year from now to remember which one was live.
+const questions = JSON.parse(await readFile(join(root, 'public/data/questions.json'), 'utf8'));
+const question = questions.frequency[questions.activeFrequency];
 
 const forecasts = dump.forecasts.map((r) => ({ ...r, q1: clampP(r.q1) }));
 if (forecasts.length === 0) {
@@ -125,9 +140,8 @@ await writeFile(
 );
 
 /* --- the outcome notice -------------------------------------------------------
-   Rendered, not sent. Wiring a provider means naming it in the APP 8 overseas-
-   disclosure statement in public/privacy.html first — the notice below carries
-   a placeholder so it cannot be sent without that decision being made.        */
+   Rendered, not sent. Paste it into Gmail as a mail merge against
+   recipients.csv, which carries one row per address.                          */
 
 const contacts = (dump.contacts ?? []).map((c) => ({ ...c, consent: JSON.parse(c.consent) }));
 
@@ -147,7 +161,9 @@ const notice = `Subject: The CyberCon forecast resolved ${outcomeRaw.toUpperCase
 
 You forecast this at CyberCon 2026:
 
-  "${dump.questionText ?? '[question text — paste from public/data/questions.json]'}"
+  "${question.text}"
+
+It resolved against: ${question.resolutionSource}
 
 It resolved ${outcomeRaw.toUpperCase()}.
 
@@ -161,16 +177,19 @@ next one starts from evidence instead of assertion.
 You asked to be told how this resolved. We are not adding you to anything else
 unless you separately asked for that.
 
-Unsubscribe: [UNSUBSCRIBE URL]
-Access, correction or deletion: privacy@cyquantifi.com
-Sent by CyQuantiFi via [MAIL PROVIDER — name this in public/privacy.html before sending].
+To unsubscribe, reply to this email with "unsubscribe" — a person reads it, and
+we delete your address on request. Same for access or correction:
+privacy@cyquantifi.com.
+
+Sent by CyQuantiFi using Gmail (Google LLC), whose systems are located outside
+Australia. See https://cyquantifi.com/privacy.
 `;
 
 await writeFile(join(outDir, 'outcome-notice.txt'), notice);
 await writeFile(join(outDir, 'recipients.csv'), `email,outcome,marketing\n${wantOutcome.map((c) => `${c.email},${c.consent.outcome},${c.consent.marketing}`).join('\n')}\n`);
 
 console.log(`\nWrote ${outDir}/scores.csv, summary.json, outcome-notice.txt, recipients.csv`);
-console.log(`${wantOutcome.length} people asked to be told. Nothing has been sent — the send path is deliberately unwired.`);
+console.log(`${wantOutcome.length} people asked to be told. Nothing has been sent — send it by hand from Gmail.`);
 if (duplicates > 0) console.log(`${duplicates} duplicate address rows collapsed; each address appears once.`);
 if (contacts.length > 0 && wantOutcome.length === 0) {
   console.log('Addresses exist but nobody ticked the outcome box. Do not email them.');

@@ -143,7 +143,10 @@ export function parseSubmission(body) {
       consent: {
         outcome: consent.outcome === true,
         marketing: consent.marketing === true,
-        text: typeof consent.text === 'string' ? consent.text.slice(0, 16) : 'v1',
+        // Never guess a version. The whole point of storing it is to prove what
+        // someone was shown, and defaulting to a real version number would
+        // attest to text a client that sent nothing may never have displayed.
+        text: typeof consent.text === 'string' ? consent.text.slice(0, 16) : 'unknown',
         ts: Date.now()
       }
     };

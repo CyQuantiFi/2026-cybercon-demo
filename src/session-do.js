@@ -175,7 +175,7 @@ export class SessionDO extends DurableObject {
         f.id,
         f.contact.email,
         JSON.stringify(f.contact.consent),
-        f.contact.consent.text ?? 'v1',
+        f.contact.consent.text ?? 'unknown',
         f.contact.consent.ts ?? f.ts
       );
     }
