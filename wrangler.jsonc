@@ -1,0 +1,48 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "cybercon-2026-demo",
+  "main": "src/index.js",
+  "compatibility_date": "2026-08-01",
+
+  // The participant app, the board and the moderation view are plain static
+  // files. Assets are matched first; anything that is not a file on disk
+  // (i.e. /api/*) falls through to the Worker in src/index.js.
+  "assets": {
+    "directory": "./public",
+    "binding": "ASSETS"
+  },
+
+  // Live counter and append log. A Durable Object rather than KV because the
+  // whole demo happens inside a 7-minute window and KV's eventual consistency
+  // would show the board a stale count while people are still submitting.
+  "durable_objects": {
+    "bindings": [{ "name": "SESSION", "class_name": "SessionDO" }]
+  },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["SessionDO"] }],
+
+  // Read-cheap fallback: the last computed aggregate, so the board still has
+  // something to poll if the Durable Object is briefly unreachable.
+  "kv_namespaces": [
+    {
+      "binding": "AGG_KV",
+      // Replace with the id printed by:
+      //   npx wrangler kv namespace create AGG_KV
+      "id": "REPLACE_WITH_KV_NAMESPACE_ID"
+    }
+  ],
+
+  "vars": {
+    "SESSION_ID": "cybercon-2026",
+    // Public Turnstile site key. The secret half is a Worker secret; when the
+    // secret is unset the check is skipped entirely so local dev works.
+    "TURNSTILE_SITE_KEY": "",
+    "MODEL_NAME": "claude-opus-5"
+  },
+
+  // Secrets, set with `npx wrangler secret put <NAME>` — never in this file:
+  //   ANTHROPIC_API_KEY   the LLM participant's key, server side only
+  //   TURNSTILE_SECRET    optional; when absent, submissions are not challenged
+  //   MOD_TOKEN           shared secret for the moderation view
+
+  "observability": { "enabled": true }
+}

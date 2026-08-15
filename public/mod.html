@@ -1,0 +1,142 @@
+<!doctype html>
+<html lang="en-AU">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#05050A">
+<meta name="robots" content="noindex">
+<title>Moderation — CyberCon 2026</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 32 32%27%3E%3Ccircle cx=%2716%27 cy=%2716%27 r=%2712%27 fill=%27%23FF2FA0%27/%3E%3C/svg%3E">
+<link rel="preload" href="fonts/FunnelDisplay-latin.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="css/tokens.css">
+<style>
+/* A phone in the presenter's pocket. One tap to approve, nothing else. */
+body { font-size: 17px; line-height: 1.4; }
+.wrap { max-width: 560px; margin: 0 auto; padding: 22px 18px max(22px, env(safe-area-inset-bottom)); }
+.eyebrow { font-size: 12px; margin-bottom: 10px; }
+h1 { font-size: 26px; font-weight: 700; letter-spacing: var(--track-headline); margin: 0 0 6px; }
+.sub { color: var(--fg-4); font-size: 14px; margin: 0 0 20px; }
+.token { display: flex; gap: 10px; margin-bottom: 22px; }
+.input {
+  flex: 1; background: rgba(255,255,255,.04); border: 1px solid var(--hairline-strong);
+  border-radius: 10px; color: var(--fg); font-family: var(--font); font-size: 16px; padding: 12px 14px;
+}
+.btn {
+  min-height: 48px; padding: 0 18px; border-radius: 10px; border: 1px solid transparent;
+  font-family: var(--font); font-size: 16px; font-weight: 700; cursor: pointer;
+}
+.btn--primary { background: var(--pink); color: var(--ink-deep); }
+.btn--ghost { background: transparent; border-color: var(--hairline-strong); color: var(--fg-2); }
+.counts { display: flex; gap: 18px; font-size: 12px; text-transform: uppercase; letter-spacing: var(--track-eyebrow); color: var(--fg-4); margin-bottom: 6px; }
+.counts b { color: var(--pink); }
+.note { border-top: 1px solid var(--hairline); padding: 16px 0; }
+.note__text { margin: 0 0 10px; color: var(--fg); font-size: 16.5px; }
+.note__meta { font-size: 11px; text-transform: uppercase; letter-spacing: var(--track-eyebrow); color: var(--muted-3); margin: 0 0 12px; }
+.note__actions { display: flex; gap: 10px; }
+.note__actions .btn { flex: 1; }
+.note[data-approved='1'] { opacity: .5; }
+.note[data-approved='1'] .note__text::before { content: 'ON BOARD · '; color: var(--pink); font-weight: 700; font-size: 11px; letter-spacing: var(--track-eyebrow); }
+.status { font-size: 13px; color: var(--cyan-deep); min-height: 1.3em; margin: 12px 0 0; }
+.empty { color: var(--fg-4); font-size: 15px; padding-top: 20px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <p class="eyebrow">Moderation</p>
+  <h1>Nothing reaches the board unapproved</h1>
+  <p class="sub">Approve a line and it joins the rotation on Panel A within two seconds. Tap again to pull it back off.</p>
+
+  <div class="token">
+    <input class="input" type="password" id="token" placeholder="Moderation token" autocomplete="off">
+    <button class="btn btn--primary" id="load">Load</button>
+  </div>
+
+  <div class="counts"><span>Pending <b id="pending">0</b></span><span>On board <b id="approved">0</b></span></div>
+  <div id="list"></div>
+  <p class="status" id="status"></p>
+</div>
+
+<script type="module">
+const $ = (id) => document.getElementById(id);
+const KEY = 'cyq.modtoken';
+let token = sessionStorage.getItem(KEY) || new URLSearchParams(location.search).get('t') || '';
+$('token').value = token;
+
+$('load').addEventListener('click', () => {
+  token = $('token').value.trim();
+  sessionStorage.setItem(KEY, token);
+  load();
+});
+
+async function load() {
+  if (!token) return status('Enter the token first.');
+  try {
+    const res = await fetch('/api/mod/notes', { headers: { 'x-mod-token': token } });
+    if (res.status === 401) return status('Token rejected.');
+    render((await res.json()).notes ?? []);
+    status('');
+  } catch {
+    status('Could not reach the server.');
+  }
+}
+
+async function setApproved(id, approved) {
+  try {
+    const res = await fetch('/api/mod/approve', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-mod-token': token },
+      body: JSON.stringify({ id, approved })
+    });
+    if (!res.ok) return status('Rejected.');
+    render((await res.json()).notes ?? []);
+  } catch {
+    status('Could not reach the server.');
+  }
+}
+
+function render(notes) {
+  $('pending').textContent = String(notes.filter((n) => !n.approved).length);
+  $('approved').textContent = String(notes.filter((n) => n.approved).length);
+
+  if (!notes.length) {
+    $('list').innerHTML = '<p class="empty">No reasoning submitted yet.</p>';
+    return;
+  }
+
+  // Pending first — that is the queue that needs a thumb on it.
+  const sorted = [...notes].sort((a, b) => a.approved - b.approved || b.ts - a.ts);
+  $('list').replaceChildren(...sorted.map(row));
+}
+
+function row(n) {
+  const wrap = document.createElement('div');
+  wrap.className = 'note';
+  wrap.dataset.approved = n.approved ? '1' : '0';
+
+  const text = document.createElement('p');
+  text.className = 'note__text';
+  text.textContent = n.note;
+
+  const meta = document.createElement('p');
+  meta.className = 'note__meta';
+  meta.textContent = `${n.role ?? 'other'} · ${Math.round(n.q1 * 100)}% · ${new Date(n.ts).toLocaleTimeString('en-AU')}`;
+
+  const actions = document.createElement('div');
+  actions.className = 'note__actions';
+  const btn = document.createElement('button');
+  btn.className = n.approved ? 'btn btn--ghost' : 'btn btn--primary';
+  btn.textContent = n.approved ? 'Take off the board' : 'Approve';
+  btn.addEventListener('click', () => setApproved(n.id, !n.approved));
+  actions.append(btn);
+
+  wrap.append(text, meta, actions);
+  return wrap;
+}
+
+function status(text) { $('status').textContent = text; }
+
+if (token) load();
+setInterval(() => { if (token) load(); }, 4000);
+</script>
+</body>
+</html>

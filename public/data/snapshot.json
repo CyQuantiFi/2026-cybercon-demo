@@ -1,0 +1,193 @@
+{
+  "_comment": "Bundled fallback for the presenter board. ?offline=1 runs the whole narration off this.",
+  "builtAt": 1786786307037,
+  "source": "seed file",
+  "aggregate": {
+    "n": 20,
+    "seeded": 20,
+    "crowd": {
+      "n": 20,
+      "median": 0.8981633034297372,
+      "p25": 0.7748450982898893,
+      "p75": 0.9554445884458334,
+      "rawMedian": 0.8102016424219542,
+      "histogram": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        1,
+        0,
+        1,
+        0,
+        1,
+        1,
+        1,
+        2,
+        2,
+        3,
+        3,
+        3,
+        2
+      ]
+    },
+    "magnitude": {
+      "n": 20,
+      "low": 299999.9999999999,
+      "mode": 1048808.8481701515,
+      "high": 6745368.781616016
+    },
+    "model": {
+      "p": 0.72,
+      "baseRate": "Placeholder — no model call has been made yet.",
+      "reasons": [
+        "Run `npm run model` to replace this with a real forecast.",
+        "Then run `npm run snapshot` so the offline board matches."
+      ],
+      "ranAt": 0,
+      "live": false,
+      "placeholder": true
+    },
+    "ensemble": {
+      "p": 0.8264568589206819,
+      "band": [
+        0.7484133678016945,
+        0.8813160663468715
+      ],
+      "weights": {
+        "crowd": 0.5,
+        "model": 0.5
+      }
+    },
+    "divergence": {
+      "gap": -1.2325197790251317,
+      "direction": "model-lower",
+      "label": "The room is materially more pessimistic than the model. That gap is the most useful thing on this screen — it marks the assumption worth arguing about."
+    },
+    "byRole": {
+      "leadership": {
+        "n": 4,
+        "median": 0.9586019068970271
+      },
+      "risk": {
+        "n": 5,
+        "median": 0.9232496774217047
+      },
+      "engineering": {
+        "n": 5,
+        "median": 0.8697216111777915
+      },
+      "vendor": {
+        "n": 3,
+        "median": 0.8386095222035911
+      },
+      "other": {
+        "n": 3,
+        "median": 0.6757530623048726
+      }
+    },
+    "byConfidence": {
+      "high": {
+        "n": 6,
+        "median": 0.9586019068970271
+      },
+      "med": {
+        "n": 9,
+        "median": 0.8888888888888888
+      },
+      "low": {
+        "n": 5,
+        "median": 0.6187297366915497
+      }
+    },
+    "notes": [
+      {
+        "note": "Three separate edge appliances hit KEV in the last eighteen months. The base rate alone gets you most of the way there.",
+        "role": "leadership",
+        "q1": 0.88,
+        "ts": 1786786307036
+      },
+      {
+        "note": "The binding constraint is public attribution, not exploitation. Plenty happens that nobody names.",
+        "role": "risk",
+        "q1": 0.82,
+        "ts": 1786786307036
+      },
+      {
+        "note": "Two years is a long window and OAIC reporting has been getting more specific, not less.",
+        "role": "engineering",
+        "q1": 0.93,
+        "ts": 1786786307036
+      },
+      {
+        "note": "Everyone is anchoring on exploitation. The question asks for a named Australian victim, and that pairing is genuinely rarer than it feels.",
+        "role": "risk",
+        "q1": 0.45,
+        "ts": 1786786307036
+      },
+      {
+        "note": "ASD advisories have named sectors before. It only takes one ASX-listed disclosure to resolve this.",
+        "role": "leadership",
+        "q1": 0.9,
+        "ts": 1786786307036
+      },
+      {
+        "note": "Edge devices are where the unpatchable stuff lives. Nobody reboots the VPN concentrator.",
+        "role": "engineering",
+        "q1": 0.78,
+        "ts": 1786786307036
+      },
+      {
+        "note": "Attribution is the hard part. Australian organisations disclose the breach and stay quiet about the vector.",
+        "role": "other",
+        "q1": 0.62,
+        "ts": 1786786307036
+      },
+      {
+        "note": "I would take the other side of anything under 90% here.",
+        "role": "engineering",
+        "q1": 0.95,
+        "ts": 1786786307036
+      },
+      {
+        "note": "Vendor disclosure timelines are the rate limiter, and they are slow by design.",
+        "role": "vendor",
+        "q1": 0.7,
+        "ts": 1786786307036
+      },
+      {
+        "note": "Reading the ambiguity rule closely, endpoint agents are excluded and that removes most of what I was thinking of.",
+        "role": "other",
+        "q1": 0.35,
+        "ts": 1786786307036
+      },
+      {
+        "note": "Two independent news reports is a low bar. This resolves on a quiet Tuesday and nobody notices.",
+        "role": "leadership",
+        "q1": 0.91,
+        "ts": 1786786307036
+      },
+      {
+        "note": "It has probably already happened and we are waiting on the paperwork.",
+        "role": "vendor",
+        "q1": 0.99,
+        "ts": 1786786307036
+      }
+    ],
+    "method": {
+      "extremiseA": 1.5,
+      "weights": {
+        "crowd": 0.5,
+        "model": 0.5
+      },
+      "clamp": [
+        0.01,
+        0.99
+      ]
+    },
+    "updated": 1786786307036
+  }
+}

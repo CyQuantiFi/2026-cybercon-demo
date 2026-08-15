@@ -1,0 +1,22 @@
+{
+  "name": "cybercon-2026-demo",
+  "version": "1.0.0",
+  "private": true,
+  "description": "CyQuantiFi live crowd-forecasting demo for the CyberCon 2026 'Experts as a Service' session",
+  "type": "module",
+  "license": "Apache-2.0",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "test": "node --test 'test/*.test.mjs'",
+    "seed": "node scripts/seed.mjs",
+    "model": "node scripts/model-participant.mjs",
+    "qr": "node scripts/make-qr.mjs",
+    "score": "node scripts/score.mjs",
+    "snapshot": "node scripts/snapshot.mjs"
+  },
+  "devDependencies": {
+    "qrcode": "^1.5.4",
+    "wrangler": "^4.42.0"
+  }
+}

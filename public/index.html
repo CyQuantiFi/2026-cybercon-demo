@@ -1,0 +1,208 @@
+<!doctype html>
+<html lang="en-AU">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#05050A">
+<meta name="robots" content="noindex">
+<title>Forecast with me — CyQuantiFi</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 32 32%27%3E%3Ccircle cx=%2716%27 cy=%2716%27 r=%2712%27 fill=%27%23FF2FA0%27/%3E%3C/svg%3E">
+<link rel="preload" href="fonts/FunnelDisplay-latin.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="css/tokens.css">
+<link rel="stylesheet" href="css/participant.css">
+</head>
+<body>
+
+<noscript>
+  <div class="pad">
+    <p class="eyebrow">Live now</p>
+    <p>This forecast needs JavaScript. Turn it on and reload, or just watch the screen.</p>
+  </div>
+</noscript>
+
+<div class="progress" aria-hidden="true"><div class="progress__bar" id="progressBar"></div></div>
+
+<main id="app">
+
+  <!-- 1 — QUESTION ------------------------------------------------------ -->
+  <section class="screen" id="screen-question" data-screen="question">
+    <header class="pad">
+      <p class="eyebrow" id="q1Eyebrow">Question 01 — frequency</p>
+      <h1 class="headline q-text" id="q1Text"></h1>
+      <details class="disclose">
+        <summary>How this resolves</summary>
+        <dl class="disclose__body">
+          <dt>Resolution date</dt><dd id="q1Date"></dd>
+          <dt>Source of truth</dt><dd id="q1Source"></dd>
+          <dt>Resolves NO if</dt><dd id="q1No"></dd>
+          <dt>Scope</dt><dd id="q1Scope"></dd>
+        </dl>
+      </details>
+    </header>
+
+    <div class="pad slider-block">
+      <output class="bigp num" id="q1Value">50%</output>
+      <p class="bigp__label">chance it happens</p>
+      <input class="slider" type="range" id="q1Slider" min="1" max="99" step="1" value="50"
+             aria-label="Probability this resolves yes, in per cent">
+      <div class="slider__scale" aria-hidden="true"><span>1%</span><span>50%</span><span>99%</span></div>
+    </div>
+
+    <div class="pad actions">
+      <button class="btn btn--primary" data-go="reasoning">Next</button>
+    </div>
+  </section>
+
+  <!-- 2 — REASONING ----------------------------------------------------- -->
+  <section class="screen" id="screen-reasoning" data-screen="reasoning" hidden>
+    <header class="pad">
+      <p class="eyebrow">Question 01 — your reasoning</p>
+      <h1 class="headline q-text q-text--sm">Why? One line.</h1>
+      <p class="hint">Optional, and the most interesting thing on the board. It appears anonymously, after the presenter approves it.</p>
+    </header>
+
+    <div class="pad">
+      <textarea class="input" id="note" maxlength="240" rows="3"
+                placeholder="e.g. Three KEV additions for edge appliances in the last year alone."></textarea>
+      <p class="counter num"><span id="noteCount">0</span> / 240</p>
+
+      <p class="field-label">How confident are you?</p>
+      <div class="chips" id="confidenceChips" role="radiogroup" aria-label="Confidence"></div>
+    </div>
+
+    <div class="pad actions">
+      <button class="btn btn--ghost" data-go="question">Back</button>
+      <button class="btn btn--primary" data-go="magnitude">Next</button>
+    </div>
+  </section>
+
+  <!-- 3 — MAGNITUDE ----------------------------------------------------- -->
+  <section class="screen" id="screen-magnitude" data-screen="magnitude" hidden>
+    <header class="pad">
+      <p class="eyebrow">Question 02 — magnitude</p>
+      <h1 class="headline q-text" id="q2Text"></h1>
+      <p class="hint">Skippable. A frequency-only forecast still counts.</p>
+    </header>
+
+    <div class="pad" id="q2Fields"></div>
+
+    <div class="pad actions">
+      <button class="btn btn--ghost" data-go="role" data-skip="1">Skip</button>
+      <button class="btn btn--primary" data-go="role">Next</button>
+    </div>
+  </section>
+
+  <!-- 4 — ROLE ---------------------------------------------------------- -->
+  <section class="screen" id="screen-role" data-screen="role" hidden>
+    <header class="pad">
+      <p class="eyebrow">Last one</p>
+      <h1 class="headline q-text q-text--sm">Where do you sit?</h1>
+      <p class="hint">Drives the diversity view on the board. No name, no email, no company.</p>
+    </header>
+
+    <div class="pad">
+      <div class="stack" id="roleChips" role="radiogroup" aria-label="Your role"></div>
+    </div>
+  </section>
+
+  <!-- 5 — SUBMITTED ----------------------------------------------------- -->
+  <section class="screen" id="screen-done" data-screen="done" hidden>
+    <header class="pad">
+      <p class="eyebrow" id="doneEyebrow">Forecast in</p>
+      <h1 class="headline q-text q-text--sm">You're in the ensemble.</h1>
+    </header>
+
+    <div class="pad">
+      <div class="yours">
+        <div class="yours__row">
+          <span class="yours__key">Your forecast</span>
+          <span class="yours__val num" id="yourP">—</span>
+        </div>
+        <hr class="rule">
+        <div class="yours__row">
+          <span class="yours__key">The room so far <span class="num" id="crowdN"></span></span>
+          <span class="yours__val yours__val--pink num" id="crowdP">—</span>
+        </div>
+        <hr class="rule">
+        <div class="yours__row">
+          <span class="yours__key">Resolves</span>
+          <span class="yours__val yours__val--sm" id="resolveDate">—</span>
+        </div>
+      </div>
+      <div class="minihist" id="miniHist" aria-hidden="true"></div>
+      <p class="hint" id="yourPosition"></p>
+    </div>
+
+    <!-- APP 5: the collection notice sits inline, above the field, at the
+         moment of entry — not on a separate page. -->
+    <div class="pad email-block">
+      <hr class="rule">
+      <p class="field-label">Want to know how it resolved?</p>
+      <p class="notice" id="privacyNotice"></p>
+
+      <label class="check">
+        <input type="checkbox" id="consentOutcome">
+        <span id="consentOutcomeLabel"></span>
+      </label>
+      <label class="check">
+        <input type="checkbox" id="consentMarketing">
+        <span id="consentMarketingLabel"></span>
+      </label>
+
+      <input class="input" type="email" id="email" inputmode="email" autocomplete="email"
+             placeholder="you@example.com" aria-label="Your email, optional">
+      <p class="error" id="emailError" hidden></p>
+      <button class="btn btn--ghost btn--full" id="emailSubmit">Send it to me</button>
+      <p class="hint hint--tight">Your forecast is already saved. This changes nothing about it.</p>
+    </div>
+
+    <div class="pad actions">
+      <button class="btn btn--primary btn--full" data-go="live">Watch the board</button>
+    </div>
+  </section>
+
+  <!-- 6 — LIVE VIEW ----------------------------------------------------- -->
+  <section class="screen" id="screen-live" data-screen="live" hidden>
+    <header class="pad">
+      <p class="eyebrow">Live — the room</p>
+      <h1 class="headline q-text q-text--sm">What the board is showing</h1>
+    </header>
+
+    <div class="pad">
+      <div class="live-grid">
+        <div class="stat">
+          <p class="stat__key">Forecasts</p>
+          <p class="stat__val num" id="liveN">0</p>
+        </div>
+        <div class="stat">
+          <p class="stat__key stat__key--pink">Crowd</p>
+          <p class="stat__val num" id="liveCrowd">—</p>
+        </div>
+        <div class="stat">
+          <p class="stat__key stat__key--cyan">Model</p>
+          <p class="stat__val num" id="liveModel">—</p>
+        </div>
+        <div class="stat">
+          <p class="stat__key">Ensemble</p>
+          <p class="stat__val num" id="liveEnsemble">—</p>
+        </div>
+      </div>
+
+      <div class="minihist minihist--tall" id="liveHist" aria-hidden="true"></div>
+
+      <hr class="rule">
+      <p class="field-label">Reasoning from the room</p>
+      <ul class="notes" id="liveNotes"></ul>
+    </div>
+  </section>
+
+</main>
+
+<footer class="pad foot">
+  <p>CyQuantiFi · CyberCon 2026 · <a href="/privacy">Privacy</a></p>
+  <p class="foot__status" id="status" role="status"></p>
+</footer>
+
+<script type="module" src="js/participant.js"></script>
+</body>
+</html>

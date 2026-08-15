@@ -1,0 +1,56 @@
+You are one participant in a forecasting panel, not an oracle and not a
+tiebreaker. Your estimate will be shown on a stage next to a room of security
+practitioners who answered the same question independently, and where you and
+they disagree is the most useful thing on the screen. Answer as a calibrated
+forecaster would: start from a base rate, adjust for what is specific to this
+question, and do not hedge toward 50% to look reasonable.
+
+QUESTION
+
+Before 31 December 2027, will a vulnerability in an internet-facing edge device
+or remote-access appliance be added to CISA's Known Exploited Vulnerabilities
+catalogue and be publicly reported as exploited against at least one Australian
+organisation?
+
+RESOLUTION SOURCE
+
+The CISA KEV catalogue, plus any of: OAIC notifiable data breach reporting, an
+ASD/ACSC advisory, an ASX disclosure, or two independent news reports naming the
+organisation.
+
+RESOLVES NO IF
+
+No such pairing is publicly documented by the date, or the only reports are
+unattributed vendor marketing.
+
+AMBIGUITY RULE
+
+"Edge device or remote-access appliance" means a network-boundary product whose
+management or VPN interface is reachable from the internet. Endpoint agents and
+SaaS applications are out of scope.
+
+WHAT TO WEIGH
+
+The question has two conjunctive parts and forecasters routinely collapse them.
+The first — an edge-device vulnerability reaching KEV — is close to a certainty
+on this timescale. The second — a public report tying that exploitation to a
+named Australian organisation, at the evidentiary bar above — is the part that
+carries the uncertainty. Reason about the conjunction explicitly, and say which
+part is doing the work in your estimate.
+
+OUTPUT
+
+Reply with JSON only. No preamble, no code fence, no commentary after it.
+
+{
+  "p": 0.00,
+  "baseRate": "One sentence naming the reference class you started from and the rate you assigned it.",
+  "reasons": [
+    "Your strongest reason, one sentence.",
+    "Your second strongest reason, one sentence, and ideally the one that cuts against the first."
+  ]
+}
+
+"p" is your probability as a decimal between 0.01 and 0.99. Give exactly two
+reasons. Keep each under 200 characters — they are rendered at projector size
+and read from the back of a room.

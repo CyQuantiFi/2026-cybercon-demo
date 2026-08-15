@@ -1,0 +1,570 @@
+/* ---------------------------------------------------------------------------
+   Presenter board — one 1920×1080 page, dark, in the same browser as the deck.
+
+   Type scale is derived from the deck itself: the slides are 21.99in wide, so
+   one slide point is 1920 / (21.99 × 72) ≈ 1.21 board pixels. The deck's 70.9pt
+   headline is 86px here, its 29.68pt body is 36px, its 19.79pt eyebrow is 24px.
+   The board and the slides therefore look like the same object at the same
+   distance, which is the point — they are projected one after the other.
+
+   Everything is sized so the back row can read it. The four panels share a
+   fixed 1080px of height with no scrolling, so anything that would overflow is
+   clamped or dropped rather than pushed below the fold — a number nobody can
+   see is worse than a number that was never drawn.
+--------------------------------------------------------------------------- */
+
+.board {
+  width: 1920px;
+  height: 1080px;
+  overflow: hidden;
+  background: var(--ink-deep);
+}
+
+/* Scale to whatever the projector actually is, without reflowing anything —
+   the layout is authored once at 1920×1080 and then transformed. */
+.stage {
+  width: 1920px;
+  height: 1080px;
+  transform-origin: top left;
+  display: flex;
+  flex-direction: column;
+  padding: 36px 56px 22px;
+}
+
+/* --- top bar ---------------------------------------------------------------- */
+
+.topbar {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 60px;
+  padding-bottom: 18px;
+  border-bottom: 1px solid var(--hairline-strong);
+}
+
+.topbar__left { flex: 1; min-width: 0; }
+
+.topbar .eyebrow { font-size: 22px; margin-bottom: 12px; }
+
+/* The live flag pulses only while submissions are actually landing. */
+.topbar .eyebrow[data-live='1']::before {
+  content: '';
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--pink);
+  margin-right: 12px;
+  vertical-align: middle;
+  animation: pulse 1.8s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.25; }
+}
+
+/* Clamped to three lines. The question is long by design, and the four panels
+   below it need every pixel they can get on a 1080-tall stage. */
+.topbar__q {
+  font-size: 28px;
+  font-weight: 400;
+  letter-spacing: 0;
+  line-height: 1.26;
+  color: var(--fg-2);
+  margin: 0;
+  max-width: 1180px;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.topbar__right { text-align: right; flex: none; }
+
+.topbar__count {
+  font-size: 86px;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  line-height: 0.9;
+  color: var(--pink);
+  margin: 0;
+}
+
+.topbar__countLabel {
+  font-size: 20px;
+  text-transform: uppercase;
+  letter-spacing: var(--track-eyebrow);
+  color: var(--fg-4);
+  margin: 8px 0 0;
+}
+
+.topbar__seed {
+  font-size: 18px;
+  color: var(--muted-3);
+  margin: 6px 0 0;
+}
+
+/* --- the four panels --------------------------------------------------------- */
+
+.panels {
+  flex: 1;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 1px;
+  background: var(--hairline);
+  margin-top: 1px;
+  min-height: 0;
+}
+
+.panel {
+  background: var(--ink-deep);
+  padding: 24px 26px 20px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+
+  /* Revealed by keypress so the reveal matches the narration. Hidden panels
+     stay in the grid and hold their space — the layout never jumps mid-talk. */
+  opacity: 0;
+  transform: translateY(18px);
+  transition: opacity 520ms cubic-bezier(0.2, 0.7, 0.3, 1), transform 520ms cubic-bezier(0.2, 0.7, 0.3, 1);
+  pointer-events: none;
+}
+
+.panel[data-revealed='1'] {
+  opacity: 1;
+  transform: none;
+  pointer-events: auto;
+}
+
+.panel__head {
+  display: flex;
+  align-items: baseline;
+  gap: 14px;
+  padding-bottom: 14px;
+  margin-bottom: 18px;
+  border-bottom: 1px solid var(--hairline);
+}
+
+.panel__head .marker { font-size: 26px; }
+.marker--cyan { color: var(--cyan); }
+.panel__head .eyebrow { font-size: 18px; color: var(--fg-3); }
+.panel__head .eyebrow--cyan { color: var(--cyan); }
+
+.panel__body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+/* --- figures ----------------------------------------------------------------- */
+
+.figure { margin: 0; }
+
+.figure__val {
+  font-size: 40px;
+  font-weight: 700;
+  letter-spacing: -0.025em;
+  line-height: 1;
+  margin: 0;
+  color: var(--fg);
+}
+
+.figure--hero .figure__val {
+  font-size: 84px;
+  color: var(--pink);
+}
+
+.figure__val--sm { font-size: 32px; color: var(--fg-2); }
+
+.figure__key {
+  font-size: 15px;
+  text-transform: uppercase;
+  letter-spacing: var(--track-eyebrow);
+  color: var(--fg-4);
+  margin: 8px 0 0;
+}
+
+/* --- panel A: the crowd ------------------------------------------------------- */
+
+.crowd__figures { padding-bottom: 18px; }
+
+/* The two supporting figures share a row: the IQR is the spread the presenter
+   points at, and the raw median is what extremisation moved. Side by side they
+   read as one comparison and cost half the height. */
+.crowd__pair {
+  display: flex;
+  gap: 22px;
+  border-top: 1px solid var(--hairline);
+  margin-top: 16px;
+  padding-top: 14px;
+}
+
+.crowd__pair .figure { flex: 1; min-width: 0; }
+.crowd__pair .figure__key { font-size: 13px; }
+
+.hist {
+  display: flex;
+  align-items: flex-end;
+  gap: 3px;
+  height: 120px;
+  flex: none;
+}
+
+.hist__bar {
+  flex: 1;
+  min-height: 3px;
+  background: var(--pink-deep);
+  border-radius: 2px 2px 0 0;
+  transition: height 420ms cubic-bezier(0.2, 0.7, 0.3, 1), background 300ms;
+}
+
+/* The bins inside the interquartile range carry the full accent; the tails are
+   dimmed, so the spread reads at a glance from the back of the room. */
+.hist__bar[data-in-iqr='1'] { background: var(--pink); }
+
+.hist__axis {
+  display: flex;
+  justify-content: space-between;
+  font-size: 15px;
+  letter-spacing: 0.08em;
+  color: var(--muted-3);
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--hairline);
+}
+
+/* Three lines share whatever height is left under the histogram, evenly. Each
+   one clamps its own text rather than the container clipping a sentence in
+   half, and the attribution sits outside the clamp so it always survives. */
+.reasons {
+  margin: 16px 0 0;
+  padding: 0;
+  list-style: none;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.reasons__item {
+  flex: 1 1 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border-top: 1px solid var(--hairline);
+  padding: 9px 0;
+  color: var(--fg-2);
+  animation: fadeIn 500ms ease both;
+}
+
+.reasons__text {
+  flex: 1;
+  min-height: 0;
+  margin: 0;
+  font-size: 17px;
+  line-height: 1.32;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.reasons__meta {
+  flex: none;
+  margin-top: 5px;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: var(--track-eyebrow);
+  color: var(--muted-3);
+}
+
+.reasons__empty {
+  font-size: 17px;
+  color: var(--muted-3);
+  padding-top: 14px;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: none; }
+}
+
+/* --- panel B: the model -------------------------------------------------------- */
+
+/* The model is drawn as one more participant: a probability and a line about
+   who said it, laid out exactly like a crowd entry. Never as a verdict. */
+.participant {
+  padding-bottom: 20px;
+  border-bottom: 1px solid var(--hairline);
+}
+
+.participant__p {
+  font-size: 76px;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  line-height: 1;
+  color: var(--cyan);
+}
+
+.participant__role {
+  font-size: 15px;
+  text-transform: uppercase;
+  letter-spacing: var(--track-eyebrow);
+  color: var(--fg-3);
+  margin: 6px 0 8px;
+}
+
+.participant__base {
+  font-size: 18px;
+  line-height: 1.35;
+  color: var(--fg-4);
+  margin: 0;
+}
+
+.reasons--model { flex: none; display: block; }
+.reasons--model .reasons__item {
+  flex: none;
+  display: block;
+  font-size: 17px;
+  line-height: 1.35;
+  padding: 12px 0;
+}
+
+.reasons--model .reasons__item::before {
+  content: '';
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  background: var(--cyan);
+  margin-right: 12px;
+  vertical-align: 0.15em;
+}
+
+.stamp {
+  margin-top: auto;
+  font-size: 15px;
+  color: var(--muted-3);
+  padding-top: 16px;
+  border-top: 1px solid var(--hairline);
+}
+
+/* --- panel C: the ensemble ------------------------------------------------------ */
+
+.ensemble .figure--hero .figure__val { color: var(--paper); }
+
+.band { margin: 26px 0 20px; }
+
+.band__track {
+  position: relative;
+  height: 22px;
+  background: rgba(255, 255, 255, 0.07);
+  border-radius: 11px;
+}
+
+.band__range {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  background: rgba(255, 255, 255, 0.22);
+  border-radius: 11px;
+  transition: left 420ms cubic-bezier(0.2, 0.7, 0.3, 1), width 420ms cubic-bezier(0.2, 0.7, 0.3, 1);
+}
+
+.band__tick {
+  position: absolute;
+  top: -9px;
+  width: 4px;
+  height: 40px;
+  margin-left: -2px;
+  border-radius: 2px;
+  transition: left 420ms cubic-bezier(0.2, 0.7, 0.3, 1);
+}
+
+.band__tick--crowd { background: var(--pink); }
+.band__tick--model { background: var(--cyan); }
+.band__tick--ens { background: var(--paper); width: 6px; height: 48px; top: -13px; margin-left: -3px; }
+
+.band__axis {
+  display: flex;
+  justify-content: space-between;
+  font-size: 15px;
+  color: var(--muted-3);
+  margin-top: 20px;
+  letter-spacing: 0.08em;
+}
+
+.band__legend {
+  display: flex;
+  gap: 18px;
+  margin-top: 14px;
+  font-size: 14px;
+  text-transform: uppercase;
+  letter-spacing: var(--track-eyebrow);
+}
+
+.key { color: var(--fg-4); }
+.key::before {
+  content: '';
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border-radius: 2px;
+  margin-right: 8px;
+}
+.key--pink::before { background: var(--pink); }
+.key--cyan::before { background: var(--cyan); }
+.key--white::before { background: var(--paper); }
+
+.diverge {
+  font-size: 19px;
+  line-height: 1.38;
+  color: var(--fg-2);
+  border-top: 1px solid var(--hairline);
+  padding-top: 16px;
+  margin: auto 0 0;
+}
+
+.weights {
+  font-size: 14px;
+  line-height: 1.4;
+  color: var(--muted-3);
+  margin: 12px 0 0;
+  padding-top: 12px;
+  border-top: 1px solid var(--hairline);
+}
+
+/* --- panel D: the money ---------------------------------------------------------- */
+
+.money-figures { padding-bottom: 18px; }
+.money-figures .figure--hero { order: -1; }
+.money-figures .figure--hero .figure__val { font-size: 76px; }
+
+/* Median year and 90th percentile share a row under the expected loss: the
+   pair is the point — most years cost nothing, and the tail is the argument. */
+.money-figures .money-pair {
+  display: flex;
+  gap: 22px;
+  border-top: 1px solid var(--hairline);
+  margin-top: 16px;
+  padding-top: 14px;
+}
+
+.money-figures .money-pair .figure { flex: 1; min-width: 0; }
+.money-figures .money-pair .figure__key { font-size: 13px; }
+
+/* The curve needs a labelled vertical axis to be auditable: without it the
+   shape is decorative. Labels are overlaid in HTML rather than drawn in the
+   SVG, because the SVG is stretched with preserveAspectRatio="none" and any
+   text inside it would be stretched with it. */
+.curve-wrap {
+  position: relative;
+  margin-top: auto;
+  flex: none;
+}
+
+.curve {
+  width: 100%;
+  height: 150px;
+  display: block;
+}
+
+.curve__y {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.curve__y span {
+  position: absolute;
+  right: 0;
+  transform: translateY(-50%);
+  font-size: 13px;
+  color: var(--muted-3);
+  background: var(--ink-deep);
+  padding-left: 6px;
+  letter-spacing: 0.04em;
+}
+
+.curve__ylabel {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: var(--track-eyebrow);
+  color: var(--muted-3);
+  margin: 0 0 6px;
+}
+
+.curve__line { fill: none; stroke: var(--pink); stroke-width: 3; }
+.curve__fill { fill: rgba(255, 47, 160, 0.14); }
+.curve__grid { stroke: var(--hairline); stroke-width: 1; }
+
+.curve__axis {
+  display: flex;
+  justify-content: space-between;
+  font-size: 14px;
+  color: var(--muted-3);
+  padding-top: 10px;
+  border-top: 1px solid var(--hairline);
+  letter-spacing: 0.06em;
+}
+
+.conditional {
+  font-size: 17px;
+  line-height: 1.38;
+  color: var(--fg-3);
+  margin: 16px 0 0;
+  padding-top: 14px;
+  border-top: 1px solid var(--hairline);
+}
+
+.caveat {
+  font-size: 14px;
+  text-transform: uppercase;
+  letter-spacing: var(--track-eyebrow);
+  color: var(--pink-deep);
+  margin: 14px 0 0;
+}
+
+/* --- bottom bar -------------------------------------------------------------------- */
+
+.botbar {
+  display: flex;
+  justify-content: space-between;
+  gap: 40px;
+  border-top: 1px solid var(--hairline-strong);
+  padding-top: 14px;
+  margin-top: 1px;
+  font-size: 15px;
+  color: var(--muted-3);
+}
+
+.botbar p { margin: 0; }
+
+/* The method is printed on the board so the audience can audit the arithmetic
+   while it happens. */
+.method { letter-spacing: 0.02em; }
+
+.botbar__status[data-state='offline'] { color: var(--pink); }
+.botbar__status[data-state='stale'] { color: var(--cyan-deep); }
+
+.hint-keys {
+  position: fixed;
+  bottom: 14px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 20px;
+  font-size: 14px;
+  color: var(--muted);
+  opacity: 0;
+  transition: opacity 250ms;
+  pointer-events: none;
+  letter-spacing: 0.06em;
+}
+
+.hint-keys b { color: var(--muted-3); }
+.stage:hover .hint-keys { opacity: 1; }

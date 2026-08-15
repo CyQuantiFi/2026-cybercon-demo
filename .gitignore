@@ -216,3 +216,14 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Node / Cloudflare Workers
+node_modules/
+.wrangler/
+.dev.vars
+dist/
+*.log
+
+# Local artefacts from the stage-day scripts
+public/data/model.local.json
+scratch/
