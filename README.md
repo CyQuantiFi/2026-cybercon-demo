@@ -31,7 +31,7 @@ Then open:
 | `/` or `/f` | participant app — the QR target |
 | `/board` | presenter board, authored at 1920×1080 and scaled to fit |
 | `/board?offline=1` | the same board running entirely off the bundled snapshot |
-| `/mod` | moderation view — paste the token, one tap to approve |
+| `/mod` | moderation view — paste the token, one tap to approve, reset at the bottom |
 | `/privacy` | privacy policy |
 
 `npm test` runs 43 unit tests over the aggregation and the Monte Carlo.
@@ -71,11 +71,18 @@ Arial.
   permit defining a Durable Object inside a Pages project, so §5 as written
   needs two deploys and a cross-script binding. This is one deploy with the same
   static files, the same two routes and the same DO.
-- **Per-IP rate limit is 240/minute, not tight.** Venue Wi-Fi NATs the entire
-  room behind a handful of addresses. A tight per-IP cap does not stop a ballot
-  stuffer; it locks out the audience, at exactly the moment the board is on
-  screen. The real controls are one-forecast-per-client-id with edit-in-place,
-  and Turnstile. See the comment in `src/session-do.js`.
+- **The rate limit counts distinct client ids, not requests.** Venue Wi-Fi NATs
+  the whole room behind a handful of addresses, so every phone shares one
+  counter. Counting requests would put ~150 forecasts, the second write from
+  anyone who leaves an email, and every retry through bad Wi-Fi into the same
+  bucket — comfortably over a few hundred in the minute after "scan now", and
+  the 429s would be silent while the board's counter stalled. Since every write
+  is `INSERT OR REPLACE` on a client uuid, only a previously unseen id can add a
+  row, so only that is charged: retries, edits and the email step are free, and
+  the 600/minute ceiling protects the one thing it should, a script inventing
+  fresh uuids. A rejected id is remembered so its retries are re-evaluated but
+  never re-charged — otherwise the room's own retry loop would hold the bucket
+  full and extend its own lockout. See `src/session-do.js`.
 - **The moderation and model-rerun routes exist** beyond §5's "two routes,
   nothing else". That budget is about the hot path; these are used by one phone
   in your pocket and one keypress.
@@ -172,6 +179,18 @@ account's daily recipient cap first (2,000/day on Workspace, 500/day consumer).
 
 This step is what turns a demo into a track record; it is the only part of this
 repo that matters in a year.
+
+## Resetting the session
+
+`/mod` has a **Reset the session** panel at the bottom, collapsed and behind a
+typed confirmation. It drops every forecast, every line of reasoning and every
+email address, so the room starts at a real zero — for clearing rehearsal and
+test data before the talk. The confirmation names the exact counts first, and
+there is no undo. The model artefact survives, so you do not have to re-run it.
+
+It also clears the KV mirror, which is the fallback the board reads when the
+Durable Object is briefly unreachable — otherwise a wiped session could
+reappear on screen.
 
 ## When /mod says the token is wrong
 

@@ -38,6 +38,24 @@ h1 { font-size: 26px; font-weight: 700; letter-spacing: var(--track-headline); m
 .note[data-approved='1'] .note__text::before { content: 'ON BOARD · '; color: var(--pink); font-weight: 700; font-size: 11px; letter-spacing: var(--track-eyebrow); }
 .status { font-size: 13px; color: var(--cyan-deep); min-height: 1.3em; margin: 12px 0 0; }
 .empty { color: var(--fg-4); font-size: 15px; padding-top: 20px; }
+
+/* Danger zone. Deliberately plain until opened, and a long way from Approve. */
+.danger { margin-top: 48px; border-top: 1px solid var(--hairline); padding-top: 16px; }
+.danger summary { cursor: pointer; font-size: 13px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: var(--track-eyebrow); color: var(--muted-3); list-style: none; padding: 8px 0; }
+.danger summary::-webkit-details-marker { display: none; }
+.danger summary::after { content: ' ▸'; }
+.danger[open] summary::after { content: ' ▾'; }
+.danger[open] summary { color: var(--pink); }
+.danger__body { font-size: 14px; color: var(--fg-4); margin: 8px 0 14px; }
+.danger__body--warn { color: var(--fg-2); border-left: 2px solid var(--pink); padding-left: 12px; }
+.danger__label { display: block; font-size: 12px; text-transform: uppercase;
+  letter-spacing: var(--track-eyebrow); color: var(--fg-4); margin-bottom: 8px; }
+.danger__label b { color: var(--pink); }
+.danger .input { margin-bottom: 12px; }
+.btn--danger { width: 100%; background: var(--pink-deep); color: var(--paper); }
+.btn--danger:disabled { background: transparent; border-color: var(--hairline);
+  color: var(--muted); cursor: not-allowed; }
 </style>
 </head>
 <body>
@@ -54,6 +72,22 @@ h1 { font-size: 26px; font-weight: 700; letter-spacing: var(--track-headline); m
   <div class="counts"><span>Pending <b id="pending">0</b></span><span>On board <b id="approved">0</b></span></div>
   <div id="list"></div>
   <p class="status" id="status"></p>
+
+  <!-- Collapsed, at the bottom, behind a typed confirmation. This wipes a live
+       session and there is no undo, so it should take deliberate effort to
+       reach and should never be adjacent to the Approve buttons. -->
+  <details class="danger" id="danger">
+    <summary>Reset the session</summary>
+    <p class="danger__body">
+      Clears every forecast, every line of reasoning and every email address, so
+      the room starts at a real zero. For wiping rehearsal and test data before
+      the talk. The model artefact is kept.
+    </p>
+    <p class="danger__body danger__body--warn" id="resetWhat">Checking what is in the session…</p>
+    <label class="danger__label" for="resetConfirm">Type <b>RESET</b> to confirm</label>
+    <input class="input" type="text" id="resetConfirm" autocomplete="off" autocapitalize="characters" placeholder="RESET">
+    <button class="btn btn--danger" id="resetGo" disabled>Delete everything</button>
+  </details>
 </div>
 
 <script type="module">
@@ -109,7 +143,7 @@ async function load() {
     const res = await fetch('/api/mod/notes', { headers: { 'x-mod-token': token } });
     if (!res.ok) return status(await describeFailure(res));
     render((await res.json()).notes ?? []);
-    status('');
+    clearTransientStatus();
   } catch {
     status('Could not reach the server.');
   }
@@ -188,7 +222,73 @@ function row(n) {
   return wrap;
 }
 
-function status(text) { $('status').textContent = text; }
+/**
+ * Sticky messages survive the 4-second poll. A confirmation that a session was
+ * irreversibly wiped should stay on screen until the operator does something
+ * else, not vanish two seconds later because a routine refresh succeeded.
+ */
+function status(text, sticky = false) {
+  const el = $('status');
+  el.textContent = text;
+  el.dataset.sticky = sticky ? '1' : '';
+}
+
+function clearTransientStatus() {
+  const el = $('status');
+  if (el.dataset.sticky !== '1') el.textContent = '';
+}
+
+/* --- reset ---------------------------------------------------------------- */
+
+/** Name the exact damage before asking, rather than asking for a blind yes. */
+async function describeSession() {
+  try {
+    const res = await fetch('/api/mod/counts', { headers: { 'x-mod-token': token } });
+    if (!res.ok) return $('resetWhat').textContent = await describeFailure(res);
+    const c = await res.json();
+    $('resetWhat').textContent =
+      `This will delete ${c.forecasts} forecast${c.forecasts === 1 ? '' : 's'}` +
+      `${c.seeded ? ` (${c.seeded} of them pre-seeded)` : ''}, ` +
+      `${c.notes} line${c.notes === 1 ? '' : 's'} of reasoning, and ` +
+      `${c.contacts} email address${c.contacts === 1 ? '' : 'es'}. There is no undo.`;
+  } catch {
+    $('resetWhat').textContent = 'Could not reach the server.';
+  }
+}
+
+$('danger').addEventListener('toggle', () => {
+  if ($('danger').open) describeSession();
+});
+
+$('resetConfirm').addEventListener('input', () => {
+  $('resetGo').disabled = $('resetConfirm').value.trim().toUpperCase() !== 'RESET';
+});
+
+$('resetGo').addEventListener('click', async () => {
+  const btn = $('resetGo');
+  btn.disabled = true;
+  btn.textContent = 'Deleting…';
+  try {
+    const res = await fetch('/api/mod/reset', { method: 'POST', headers: { 'x-mod-token': token } });
+    if (!res.ok) {
+      btn.textContent = 'Delete everything';
+      return status(await describeFailure(res));
+    }
+    const { deleted } = await res.json();
+    $('resetConfirm').value = '';
+    btn.textContent = 'Delete everything';
+    $('danger').open = false;
+    listKey = null;
+    // Refresh first, then report. load() clears the status line on success, and
+    // the confirmation of a destructive action is the one message that must not
+    // be wiped a millisecond after it appears.
+    await load();
+    status(`Session cleared — removed ${deleted.forecasts} forecasts, ${deleted.notes} notes, ${deleted.contacts} contacts.`, true);
+  } catch {
+    btn.textContent = 'Delete everything';
+    status('Could not reach the server.');
+  }
+});
 
 // Report an unconfigured deployment straight away, then load if we have a token.
 const configured = await checkConfigured();

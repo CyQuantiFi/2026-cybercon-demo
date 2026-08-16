@@ -238,6 +238,17 @@ async function moderation(request, env, path) {
       })
     );
   }
+  if (path === '/api/mod/counts' && request.method === 'GET') {
+    return proxy(await stub.fetch('https://session/counts'));
+  }
+  if (path === '/api/mod/reset' && request.method === 'POST') {
+    const res = await stub.fetch('https://session/reset', { method: 'POST' });
+    // Clear the KV mirror too. It is the fallback the board reads when the
+    // Durable Object is briefly unreachable, so leaving the pre-reset
+    // aggregate there would let a wiped session reappear on screen.
+    if (res.ok) await env.AGG_KV.delete(aggKey(env)).catch(() => {});
+    return proxy(res);
+  }
   if (path === '/api/mod/export' && request.method === 'GET') {
     // Forward the query string: ?include=contacts is what asks the Durable
     // Object for the email table, and silently dropping it would hand the

@@ -18,17 +18,29 @@ import { DurableObject } from 'cloudflare:workers';
 import { buildAggregate } from '../public/js/aggregate.js';
 
 /**
- * Per-IP submission limit (§9, spam / ballot stuffing).
+ * Per-IP limit on *new* forecasts (§9, spam / ballot stuffing).
  *
- * Set high on purpose. Venue Wi-Fi NATs the entire room behind a handful of
- * public addresses, so a tight per-IP cap does not stop a ballot stuffer — it
- * locks out the audience, and it does so exactly when the board is on screen.
- * The controls that actually do the work are one-forecast-per-client-id with
- * edit-in-place, and Turnstile. This ceiling exists to stop a scripted flood
- * from filling the append log, and 240/minute is far above what ~150 people
- * behind one NAT can produce by hand.
+ * Counted per distinct client id, not per request, and that distinction is the
+ * whole point. Venue Wi-Fi NATs the entire room behind a handful of public
+ * addresses, so every phone shares one counter. Counting requests would put a
+ * roomful of people into one bucket alongside their own retries:
+ *
+ *   ~150 forecasts, plus a second write each for anyone who leaves an email,
+ *   plus however many times the retry loop re-POSTs through bad venue Wi-Fi.
+ *
+ * That is comfortably over a few hundred requests in the minute after "scan
+ * now", and the failure is silent — a 429 makes the client back off 1s, 2s, 4s,
+ * 8s, so the forecast lands eventually but the counter on the board stalls
+ * during exactly the window the presenter is pointing at it.
+ *
+ * Every write is INSERT OR REPLACE on a client-generated uuid, so repeated
+ * writes with the same id cannot grow the table — they are updates. Only a
+ * previously unseen id costs anything, which makes retries, edits and the
+ * email step free, and leaves the ceiling protecting the one thing it should:
+ * a script inventing fresh uuids. 150 people cannot hand-produce 600 distinct
+ * forecasts in a minute; a script can, and Turnstile is the control for that.
  */
-const RATE_LIMIT = 240;
+const RATE_LIMIT = 600;
 const RATE_WINDOW_MS = 60_000;
 
 export class SessionDO extends DurableObject {
@@ -37,6 +49,8 @@ export class SessionDO extends DurableObject {
     this.sql = ctx.storage.sql;
     /** @type {Map<string, number[]>} in-memory, single instance, no binding needed */
     this.hits = new Map();
+    /** Ids already charged against an address, so a retry is never charged twice. */
+    this.charged = new Set();
     this.aggregate = null;
     this.model = null;
 
@@ -121,6 +135,8 @@ export class SessionDO extends DurableObject {
     if (path === '/approve') return this.approve(request);
     if (path === '/export') return this.export(request);
     if (path === '/model') return this.storeModel(request);
+    if (path === '/counts') return this.json(this.counts());
+    if (path === '/reset') return this.reset();
 
     return this.json({ error: 'not_found' }, 404);
   }
@@ -129,11 +145,26 @@ export class SessionDO extends DurableObject {
 
   async submit(request) {
     const ip = request.headers.get('cf-connecting-ip') || '';
-    if (ip && this.rateLimited(ip)) {
-      return this.json({ error: 'rate_limited' }, 429);
-    }
-
     const f = await request.json();
+
+    // Only a previously unseen id counts against the ceiling. A resubmit, a
+    // retry, or the separate email write all carry an id we already hold, and
+    // none of them can add a row — so charging them would only penalise the
+    // room for its own bad Wi-Fi.
+    const isNew = this.sql.exec('SELECT 1 FROM forecasts WHERE id = ?', f.id).toArray().length === 0;
+    if (ip && isNew) {
+      if (this.overLimit(ip)) {
+        // Remember that this id was already charged for. A rejected forecast
+        // never reaches the table, so it stays "new" on every retry — and
+        // charging it again would let the room's own retry loop hold the
+        // bucket full, which is the lockout feeding itself. Retries are
+        // re-evaluated but never re-charged, so they land the moment the
+        // window drains.
+        this.charged.add(f.id);
+        return this.json({ error: 'rate_limited' }, 429);
+      }
+      if (!this.charged.delete(f.id)) this.charge(ip);
+    }
 
     // INSERT OR REPLACE keyed on the client-generated uuid: a retry after a
     // dropped connection is a no-op, and going back to change an answer is an
@@ -246,21 +277,72 @@ export class SessionDO extends DurableObject {
     return this.json(payload);
   }
 
+  /**
+   * What is in the session right now. Read by the moderation view so the reset
+   * confirmation can name exactly what is about to be destroyed rather than
+   * asking for a blind yes.
+   */
+  counts() {
+    const one = (table) => this.sql.exec(`SELECT COUNT(*) AS n FROM ${table}`).toArray()[0].n;
+    return {
+      forecasts: one('forecasts'),
+      notes: one('notes'),
+      contacts: one('emails'),
+      seeded: this.sql.exec('SELECT COUNT(*) AS n FROM forecasts WHERE seeded = 1').toArray()[0].n
+    };
+  }
+
+  /**
+   * Empty the session.
+   *
+   * For clearing rehearsal and test data before the talk, so the room starts at
+   * a real zero. It drops forecasts, reasoning and contacts together: leaving
+   * contacts behind would keep consent records for forecasts that no longer
+   * exist, and the resolution-day job would then email people about a question
+   * whose answers were deleted.
+   *
+   * The model artefact survives, because it is not session data — it is the
+   * output of the run you did that morning, and losing it would mean running
+   * the model again for no reason.
+   */
+  reset() {
+    const before = this.counts();
+    this.sql.exec('DELETE FROM forecasts');
+    this.sql.exec('DELETE FROM notes');
+    this.sql.exec('DELETE FROM emails');
+    this.hits.clear();
+    this.charged.clear();
+    this.recompute();
+    return this.json({ ok: true, deleted: before, aggregate: this.aggregate });
+  }
+
   /* --- helpers ---------------------------------------------------------- */
 
-  rateLimited(ip) {
+  /** Read-only: is this address already at its ceiling for the window? */
+  overLimit(ip) {
+    const now = Date.now();
+    const recent = (this.hits.get(ip) ?? []).filter((t) => now - t < RATE_WINDOW_MS);
+    this.hits.set(ip, recent);
+    return recent.length >= RATE_LIMIT;
+  }
+
+  /** Record one new forecast against an address. */
+  charge(ip) {
     const now = Date.now();
     const recent = (this.hits.get(ip) ?? []).filter((t) => now - t < RATE_WINDOW_MS);
     recent.push(now);
     this.hits.set(ip, recent);
 
-    // Cheap sweep so a busy session does not grow this map without bound.
+    // Cheap sweeps so a busy session does not grow either structure without
+    // bound. Both are in-memory only and are rebuilt from zero if the Durable
+    // Object restarts, which is fine — the ceiling is a flood guard, not an
+    // accounting record.
     if (this.hits.size > 5000) {
       for (const [key, times] of this.hits) {
         if (times.every((t) => now - t >= RATE_WINDOW_MS)) this.hits.delete(key);
       }
     }
-    return recent.length > RATE_LIMIT;
+    if (this.charged.size > 20000) this.charged.clear();
   }
 
   json(value, status = 200) {
