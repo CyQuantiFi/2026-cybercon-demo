@@ -13,7 +13,8 @@
     "model": "node scripts/model-participant.mjs",
     "qr": "node scripts/make-qr.mjs",
     "score": "node scripts/score.mjs",
-    "snapshot": "node scripts/snapshot.mjs"
+    "snapshot": "node scripts/snapshot.mjs",
+    "check": "node scripts/check-deploy.mjs"
   },
   "devDependencies": {
     "qrcode": "^1.5.4",

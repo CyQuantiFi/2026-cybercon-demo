@@ -18,6 +18,7 @@
 
 import { SessionDO } from './session-do.js';
 import { verifyTurnstile } from './turnstile.js';
+import { secretEquals } from './auth.js';
 
 export { SessionDO };
 
@@ -200,9 +201,28 @@ async function readAggregate(request, env) {
  * route that can change what 150 people see.
  */
 async function moderation(request, env, path) {
-  const token = request.headers.get('x-mod-token') || new URL(request.url).searchParams.get('t');
-  if (!env.MOD_TOKEN || !token || !timingSafeEqual(token, env.MOD_TOKEN)) {
-    return json({ error: 'unauthorised' }, 401);
+  // Unauthenticated on purpose. "Is moderation set up on this deployment?" is
+  // the first question anyone asks when /mod refuses a token, and answering it
+  // needs to be possible from a phone at a podium with no laptop. It discloses
+  // only whether an operator has set a secret — /mod is already served
+  // publicly, so the existence of moderation was never hidden.
+  if (path === '/api/mod/health' && request.method === 'GET') {
+    return json({ configured: Boolean(env.MOD_TOKEN && env.MOD_TOKEN.trim()) });
+  }
+
+  const supplied = request.headers.get('x-mod-token') || new URL(request.url).searchParams.get('t');
+
+  // Three distinct problems that used to collapse into one 401. They have
+  // three different fixes, and the person hitting them is usually two minutes
+  // from going on stage.
+  if (!env.MOD_TOKEN || !env.MOD_TOKEN.trim()) {
+    return json({ error: 'not_configured' }, 503);
+  }
+  if (!supplied) {
+    return json({ error: 'no_token' }, 401);
+  }
+  if (!(await secretEquals(supplied, env.MOD_TOKEN))) {
+    return json({ error: 'bad_token' }, 401);
   }
 
   const stub = sessionStub(env);
@@ -319,9 +339,3 @@ function proxy(res) {
   return new Response(res.body, { status: res.status, headers: JSON_HEADERS });
 }
 
-function timingSafeEqual(a, b) {
-  if (a.length !== b.length) return false;
-  let diff = 0;
-  for (let i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
-  return diff === 0;
-}

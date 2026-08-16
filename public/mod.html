@@ -59,8 +59,12 @@ h1 { font-size: 26px; font-weight: 700; letter-spacing: var(--track-headline); m
 <script type="module">
 const $ = (id) => document.getElementById(id);
 const KEY = 'cyq.modtoken';
-let token = sessionStorage.getItem(KEY) || new URLSearchParams(location.search).get('t') || '';
+// Trimmed here as well as in the Load handler. A bookmarked /mod?t=… with a
+// trailing space used to fail while typing the same token by hand succeeded.
+let token = (sessionStorage.getItem(KEY) || new URLSearchParams(location.search).get('t') || '').trim();
 $('token').value = token;
+
+let listKey = null;
 
 $('load').addEventListener('click', () => {
   token = $('token').value.trim();
@@ -68,11 +72,42 @@ $('load').addEventListener('click', () => {
   load();
 });
 
+/** The server names which of the three things went wrong; say so plainly. */
+const MESSAGES = {
+  not_configured: 'Moderation is not set up on this deployment. Run `wrangler secret put MOD_TOKEN`, then redeploy.',
+  bad_token: 'Token rejected — check for a stray space, and that it matches the secret you set.',
+  no_token: 'Enter the token first.'
+};
+
+async function describeFailure(res) {
+  try {
+    const { error } = await res.json();
+    return MESSAGES[error] ?? `Refused (${res.status}).`;
+  } catch {
+    return `Refused (${res.status}).`;
+  }
+}
+
+/**
+ * Ask before anything is typed, so a deployment with no secret announces
+ * itself instead of looking like a wrong password.
+ */
+async function checkConfigured() {
+  try {
+    const res = await fetch('/api/mod/health');
+    const { configured } = await res.json();
+    if (!configured) status(MESSAGES.not_configured);
+    return configured;
+  } catch {
+    return true; // Not reachable is a different problem; let load() report it.
+  }
+}
+
 async function load() {
-  if (!token) return status('Enter the token first.');
+  if (!token) return status(MESSAGES.no_token);
   try {
     const res = await fetch('/api/mod/notes', { headers: { 'x-mod-token': token } });
-    if (res.status === 401) return status('Token rejected.');
+    if (!res.ok) return status(await describeFailure(res));
     render((await res.json()).notes ?? []);
     status('');
   } catch {
@@ -80,16 +115,27 @@ async function load() {
   }
 }
 
-async function setApproved(id, approved) {
+async function setApproved(id, approved, btn) {
+  // Held down for the round trip. On venue Wi-Fi a slow response invites a
+  // second tap, which would toggle the line straight back off again.
+  const label = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = approved ? 'Approving…' : 'Removing…';
   try {
     const res = await fetch('/api/mod/approve', {
       method: 'POST',
       headers: { 'content-type': 'application/json', 'x-mod-token': token },
       body: JSON.stringify({ id, approved })
     });
-    if (!res.ok) return status('Rejected.');
+    if (!res.ok) {
+      btn.disabled = false;
+      btn.textContent = label;
+      return status(await describeFailure(res));
+    }
     render((await res.json()).notes ?? []);
   } catch {
+    btn.disabled = false;
+    btn.textContent = label;
     status('Could not reach the server.');
   }
 }
@@ -99,12 +145,21 @@ function render(notes) {
   $('approved').textContent = String(notes.filter((n) => n.approved).length);
 
   if (!notes.length) {
-    $('list').innerHTML = '<p class="empty">No reasoning submitted yet.</p>';
+    if (listKey !== 'empty') $('list').innerHTML = '<p class="empty">No reasoning submitted yet.</p>';
+    listKey = 'empty';
     return;
   }
 
   // Pending first — that is the queue that needs a thumb on it.
   const sorted = [...notes].sort((a, b) => a.approved - b.approved || b.ts - a.ts);
+
+  // Rebuild only when the queue actually changed. The 4-second poll used to
+  // replace every row unconditionally, so a tap landing mid-rebuild hit a node
+  // that was being thrown away and the approve was silently lost.
+  const key = sorted.map((n) => `${n.id}:${n.approved ? 1 : 0}`).join(',');
+  if (key === listKey) return;
+  listKey = key;
+
   $('list').replaceChildren(...sorted.map(row));
 }
 
@@ -126,7 +181,7 @@ function row(n) {
   const btn = document.createElement('button');
   btn.className = n.approved ? 'btn btn--ghost' : 'btn btn--primary';
   btn.textContent = n.approved ? 'Take off the board' : 'Approve';
-  btn.addEventListener('click', () => setApproved(n.id, !n.approved));
+  btn.addEventListener('click', () => setApproved(n.id, !n.approved, btn));
   actions.append(btn);
 
   wrap.append(text, meta, actions);
@@ -135,7 +190,9 @@ function row(n) {
 
 function status(text) { $('status').textContent = text; }
 
-if (token) load();
+// Report an unconfigured deployment straight away, then load if we have a token.
+const configured = await checkConfigured();
+if (configured && token) load();
 setInterval(() => { if (token) load(); }, 4000);
 </script>
 </body>

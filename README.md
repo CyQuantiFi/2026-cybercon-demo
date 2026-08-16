@@ -42,10 +42,11 @@ One Cloudflare Worker with static assets. Assets are matched first; anything
 that is not a file on disk falls through to `src/index.js`.
 
 ```
-POST /api/f      append or edit a forecast          ← the two routes 150 phones hit
-GET  /api/agg    read the aggregate (ETag, 2s poll)
-POST /api/mod/*  moderation, token-gated            ← one phone, off the hot path
-POST /api/model/rerun   optional live model call
+POST /api/f            append or edit a forecast     ← the two routes 150 phones hit
+GET  /api/agg          read the aggregate (ETag, 2s poll)
+GET  /api/mod/health   is MOD_TOKEN set? no token needed
+GET/POST /api/mod/*    moderation, token-gated       ← one phone, off the hot path
+POST /api/model/rerun  optional live model call
 ```
 
 **Storage** is a Durable Object (`src/session-do.js`) with SQLite, not KV: the
@@ -131,12 +132,16 @@ already wired and answers without a redirect.
    and that the prompt has not changed since it was made.
    **The artefact in the repo is a placeholder and the board says so in pink on
    Panel B until you replace it.**
-5. `npm run seed -- https://your.domain` so the histogram is never empty.
-6. Open `/board` in the same browser as the deck. Open `/mod` on your phone.
+5. `npm run check -- https://your.domain --token $MOD_TOKEN` — verifies the
+   served bytes still match the repo, the aggregate leaks nothing, the snapshot
+   is populated, and your moderation token actually works. Run it *before* you
+   need any of that to be true on stage.
+6. `npm run seed -- https://your.domain` so the histogram is never empty.
+7. Open `/board` in the same browser as the deck. Open `/mod` on your phone.
 
 **Rehearse the failure path, not just the happy one**
 
-7. Open `/board?offline=1` and run the whole narration with the network off.
+8. Open `/board?offline=1` and run the whole narration with the network off.
    That is the path §9 says to rehearse, and it is the one you will be glad of.
 
 **On stage**
@@ -167,6 +172,27 @@ account's daily recipient cap first (2,000/day on Workspace, 500/day consumer).
 
 This step is what turns a demo into a track record; it is the only part of this
 repo that matters in a year.
+
+## When /mod says the token is wrong
+
+Ask the deployment which of the three things it is — the endpoint distinguishes
+them, and needs no token to answer:
+
+```bash
+curl https://your.domain/api/mod/health      # {"configured":true|false}
+```
+
+| What you see | What it means |
+|---|---|
+| `{"configured":false}`, or `503 not_configured` | The secret was never set on this deployment. `npx wrangler secret put MOD_TOKEN`, then redeploy. |
+| `401 bad_token` | The token does not match the stored secret. |
+| `401 no_token` | Nothing was supplied. |
+
+Leading and trailing whitespace is trimmed on both sides, so a secret that
+picked up a stray newline from the `wrangler secret put` prompt — which is easy
+to do by pasting or piping, and was the original cause of this — no longer
+breaks anything. If it still refuses, the stored value genuinely differs: set it
+again, typing rather than pasting.
 
 ## Privacy
 
