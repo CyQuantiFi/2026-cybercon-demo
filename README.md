@@ -204,6 +204,14 @@ It also clears the KV mirror, which is the fallback the board reads when the
 Durable Object is briefly unreachable — otherwise a wiped session could
 reappear on screen.
 
+**Phones notice too.** A reset empties the server, but every participant's
+forecast also lives in their own `localStorage`, so without help a phone goes on
+showing the submitted screen — and its position against a crowd — for a forecast
+the server has never heard of. The aggregate carries a session `epoch` that
+changes on every reset; a phone holding a forecast from an older epoch clears its
+local state, returns to the question and says why. You will hit this first while
+rehearsing on your own phone.
+
 ## Choosing a question
 
 The demo needs the room to **disagree**. §2: *"If the crowd converges instantly,

@@ -73,6 +73,7 @@ export class SessionDO extends DurableObject {
 
     ctx.blockConcurrencyWhile(async () => {
       this.migrate();
+      this.loadEpoch();
       await this.loadModel();
       this.recompute();
     });
@@ -111,6 +112,28 @@ export class SessionDO extends DurableObject {
         v TEXT NOT NULL
       );
     `);
+  }
+
+  /**
+   * The session epoch changes whenever the session is emptied.
+   *
+   * A reset clears the server, but every participant's phone still holds its
+   * own forecast in localStorage and would go on showing the submitted screen
+   * for a forecast the server no longer has. The epoch travels in the aggregate
+   * so a phone can notice that the session it answered no longer exists.
+   */
+  loadEpoch() {
+    const row = this.sql.exec('SELECT v FROM meta WHERE k = ?', 'epoch').toArray();
+    if (row.length > 0) {
+      this.epoch = Number(row[0].v);
+      return;
+    }
+    this.bumpEpoch();
+  }
+
+  bumpEpoch() {
+    this.epoch = Date.now();
+    this.sql.exec('INSERT OR REPLACE INTO meta (k, v) VALUES (?, ?)', 'epoch', String(this.epoch));
   }
 
   /**
@@ -285,7 +308,7 @@ export class SessionDO extends DurableObject {
       .toArray()
       .map((r) => ({ note: r.note, role: r.role, q1: r.q1, ts: r.ts }));
 
-    this.aggregate = buildAggregate(forecasts, this.model, notes);
+    this.aggregate = { ...buildAggregate(forecasts, this.model, notes), epoch: this.epoch };
     return this.aggregate;
   }
 
@@ -356,6 +379,11 @@ export class SessionDO extends DurableObject {
     // from an earlier rehearsal.
     this.sql.exec('DELETE FROM meta WHERE k = ?', 'model');
     await this.loadModel();
+
+    // New epoch, so phones still holding a forecast from the old session send
+    // themselves back to the question rather than sitting on a submitted screen
+    // for a forecast that no longer exists.
+    this.bumpEpoch();
 
     this.recompute();
     return this.json({ ok: true, deleted: before, aggregate: this.aggregate });

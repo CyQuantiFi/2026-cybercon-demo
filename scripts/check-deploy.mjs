@@ -82,7 +82,7 @@ try {
 } catch {
   ok(false, '/api/agg returns valid JSON');
 }
-const expected = 'byConfidence,byRole,crowd,divergence,ensemble,magnitude,method,model,n,notes,seeded,updated';
+const expected = 'byConfidence,byRole,crowd,divergence,ensemble,epoch,magnitude,method,model,n,notes,seeded,updated';
 ok(Object.keys(agg).sort().join() === expected, 'aggregate carries exactly the documented keys');
 
 // The board is a screen in front of 150 people. Nothing in the payload it polls

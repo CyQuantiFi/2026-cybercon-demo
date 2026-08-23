@@ -1,6 +1,6 @@
 {
   "_comment": "Bundled fallback for the presenter board. ?offline=1 runs the whole narration off this.",
-  "builtAt": 1787476976457,
+  "builtAt": 1787477953775,
   "source": "seed file",
   "aggregate": {
     "n": 20,
@@ -108,73 +108,73 @@
         "note": "Agents with tool access and no egress control are everywhere already. Something has gone wrong; the question is whether anyone says so.",
         "role": "engineering",
         "q1": 0.72,
-        "ts": 1787476976456
+        "ts": 1787477953774
       },
       {
         "note": "Organisations barely disclose root cause for ordinary breaches. 'Our agent was manipulated' is a sentence nobody wants to be first to say.",
         "role": "risk",
         "q1": 0.18,
-        "ts": 1787476976456
+        "ts": 1787477953774
       },
       {
         "note": "Two years is long enough for one board to decide candour is cheaper than speculation.",
         "role": "leadership",
         "q1": 0.55,
-        "ts": 1787476976456
+        "ts": 1787477953774
       },
       {
         "note": "Prompt injection is not speculative — it is a documented failure class with working exploits. Deployment is racing ahead of the controls.",
         "role": "engineering",
         "q1": 0.85,
-        "ts": 1787476976456
+        "ts": 1787477953774
       },
       {
         "note": "Everyone is answering a different question. Attacker-side AI is excluded, and once you strip that out there is almost nothing left.",
         "role": "risk",
         "q1": 0.12,
-        "ts": 1787476976456
+        "ts": 1787477953774
       },
       {
         "note": "Copilots with mailbox and repo access are one misconfiguration from an incident, and plenty are one misconfiguration away today.",
         "role": "engineering",
         "q1": 0.65,
-        "ts": 1787476976456
+        "ts": 1787477953774
       },
       {
         "note": "OAIC narratives are thin on cause. Even if it happens, the public record will say 'unauthorised access' and stop there.",
         "role": "risk",
         "q1": 0.22,
-        "ts": 1787476976456
+        "ts": 1787477953774
       },
       {
         "note": "Genuinely no idea. No base rate, no comparable, and the disclosure norms are being written as we go.",
         "role": "leadership",
         "q1": 0.5,
-        "ts": 1787476976456
+        "ts": 1787477953774
       },
       {
         "note": "Vendors will describe it as a customer configuration issue, which keeps it out of the resolution criteria.",
         "role": "vendor",
         "q1": 0.35,
-        "ts": 1787476976456
+        "ts": 1787477953774
       },
       {
         "note": "Someone will disclose it precisely because AI makes it newsworthy rather than embarrassing. The incentive runs the other way here.",
         "role": "leadership",
         "q1": 0.6,
-        "ts": 1787476976456
+        "ts": 1787477953774
       },
       {
         "note": "Attribution to a specific system requires forensics most organisations do not do and would not publish.",
         "role": "other",
         "q1": 0.15,
-        "ts": 1787476976456
+        "ts": 1787477953774
       },
       {
         "note": "I would take the other side of anything under 60%. Agent adoption in 2026 is faster than any control cycle I have seen.",
         "role": "engineering",
         "q1": 0.88,
-        "ts": 1787476976456
+        "ts": 1787477953774
       }
     ],
     "method": {
@@ -188,6 +188,6 @@
         0.99
       ]
     },
-    "updated": 1787476976456
+    "updated": 1787477953774
   }
 }
