@@ -126,12 +126,20 @@ function wire() {
 function renderQuestion() {
   const q = state.frequency;
   $('q1Eyebrow').textContent = q.eyebrow;
-  $('q1Text').textContent = q.text;
+  // The headline is the short form; the full claim — the thing actually scored,
+  // and the thing scripts/score.mjs quotes back a year later — sits one tap
+  // away rather than being deleted to save space.
+  $('q1Text').textContent = q.display ?? q.text;
+  $('q1Claim').textContent = q.text;
   $('q1Date').textContent = formatDate(q.resolutionDate);
   $('q1Source').textContent = q.resolutionSource;
   $('q1No').textContent = q.resolvesNoIf;
   $('q1Scope').textContent = q.ambiguityRule;
   $('resolveDate').textContent = formatDate(q.resolutionDate);
+  // Driven by the question set too. A hardcoded example about edge appliances
+  // survived a question change once already; anything that names the subject
+  // belongs next to the subject.
+  if (q.notePlaceholder) $('note').placeholder = q.notePlaceholder;
 }
 
 /* --- screen 2: reasoning --------------------------------------------------- */
@@ -157,7 +165,8 @@ function renderConfidence() {
  */
 function renderMagnitude() {
   const q2 = state.questions.magnitude;
-  $('q2Text').textContent = q2.text;
+  $('q2Text').textContent = q2.display ?? q2.text;
+  if (q2.detail) $('q2Detail').textContent = q2.detail;
 
   const { min, max, defaults, fields, anchors } = q2.answer;
   const current = state.forecast.q2 ?? { ...defaults };

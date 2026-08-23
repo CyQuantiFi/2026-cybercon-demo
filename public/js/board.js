@@ -48,7 +48,8 @@ async function boot() {
 
   state.questions = questions;
   state.snapshot = snapshot;
-  $('questionText').textContent = questions.frequency[questions.activeFrequency].text;
+  const activeQ = questions.frequency[questions.activeFrequency];
+  $('questionText').textContent = activeQ.display ?? activeQ.text;
 
   wireKeys();
 

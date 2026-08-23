@@ -17,7 +17,29 @@ import { dirname, join } from 'node:path';
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const base = (process.argv[2] || 'http://localhost:8787').replace(/\/$/, '');
 
-const { forecasts } = JSON.parse(await readFile(join(root, 'scripts/seed-forecasts.json'), 'utf8'));
+const seed = JSON.parse(await readFile(join(root, 'scripts/seed-forecasts.json'), 'utf8'));
+const { forecasts } = seed;
+
+// The board labels seeded forecasts as coming from a dry run. If they are still
+// the shipped placeholder set, that label is a lie, so say so here loudly rather
+// than letting it reach a stage unnoticed — same posture as the pink PLACEHOLDER
+// stamp Panel B shows for the model artefact.
+if (seed.placeholder) {
+  console.log('');
+  console.log('  ⚠  PLACEHOLDER SEED DATA — this is not a dry run.');
+  console.log('     The board will present these as "pre-seeded from the dry run".');
+  console.log('     Replace with real panel data a week out (§10 item 9):');
+  console.log('       node scripts/snapshot.mjs --from-live <url> --token $MOD_TOKEN');
+  console.log('');
+}
+
+// Guard against seeding answers to a question nobody was asked.
+const questions = JSON.parse(await readFile(join(root, 'public/data/questions.json'), 'utf8'));
+if (seed.answersQuestion && seed.answersQuestion !== questions.activeFrequency) {
+  console.error(`Refusing to seed: this data answers "${seed.answersQuestion}" but the active question is "${questions.activeFrequency}".`);
+  console.error('Seeding it would open the board with pre-seeded opinions about a different question.');
+  process.exit(1);
+}
 
 console.log(`Seeding ${forecasts.length} forecasts into ${base}`);
 

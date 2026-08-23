@@ -34,7 +34,7 @@ Then open:
 | `/mod` | moderation view — paste the token, one tap to approve, reset at the bottom |
 | `/privacy` | privacy policy |
 
-`npm test` runs 43 unit tests over the aggregation and the Monte Carlo.
+`npm test` runs 51 unit tests over the aggregation, the Monte Carlo and the moderation token comparison.
 
 ## Architecture
 
@@ -123,8 +123,20 @@ already wired and answers without a redirect.
 
 **A week out**
 
-1. Check both questions. If Q1 has already resolved, set `activeFrequency` to
-   `"q1b"` in `public/data/questions.json`. Nothing else changes.
+1. Check the active question. If it has already resolved, or the dry run shows
+   the room converging, switch `activeFrequency` in `public/data/questions.json`
+   to `q1b` (fourth party) or `q1` (edge device).
+
+   **Changing the question is three files, not one.** The question set, the
+   model prompt and the seed data all name the same subject, and two of them
+   fail silently if left behind:
+   - `public/data/questions.json` — `activeFrequency`
+   - `public/data/model-prompt.txt` — otherwise Panel B forecasts a *different
+     question* to the room and the board presents them side by side as
+     comparable. `node scripts/model-participant.mjs --check` catches this.
+   - `scripts/seed-forecasts.json` — otherwise the board opens pre-seeded with
+     opinions about something else. `npm run seed` now refuses outright when
+     `answersQuestion` does not match `activeFrequency`.
 2. Dry run with 20+ real people. Keep that data:
    `node scripts/snapshot.mjs --from-live https://your.domain --token $MOD_TOKEN`
    — it becomes both the seed and the offline snapshot.
@@ -192,6 +204,28 @@ It also clears the KV mirror, which is the fallback the board reads when the
 Durable Object is briefly unreachable — otherwise a wiped session could
 reappear on screen.
 
+## Choosing a question
+
+The demo needs the room to **disagree**. §2: *"If the crowd converges instantly,
+the demo has nothing to show — spread is the point."* Panel A is a histogram of
+exactly that, and a question the room already agrees on produces a bar banked
+against one edge and a dead half-screen.
+
+The original edge-device question failed this: the panel round came back median
+80%, IQR 68–88%, with only 2 of 20 below 50%. The active question is now the
+AI-agent one, which has no base rate for anyone to pattern-match against.
+
+**Judge a candidate by its histogram, not by how interesting it sounds.** After
+the dry run, if the IQR is narrower than about 20 points, or either outer third
+of the histogram is empty, use the backup instead.
+
+The AI-agent question carries one load-bearing exclusion: an *attacker* using AI
+against the organisation does not count — deepfakes, cloned voices and
+AI-written phishing are all out of scope. Only the organisation's **own** AI
+being compromised, manipulated or misused qualifies. Without that line the
+question resolves YES immediately and the spread collapses. It is in the
+ambiguity rule, in the model prompt, and it is worth saying out loud on stage.
+
 ## When /mod says the token is wrong
 
 Ask the deployment which of the three things it is — the endpoint distinguishes
@@ -206,12 +240,19 @@ curl https://your.domain/api/mod/health      # {"configured":true|false}
 | `{"configured":false}`, or `503 not_configured` | The secret was never set on this deployment. `npx wrangler secret put MOD_TOKEN`, then redeploy. |
 | `401 bad_token` | The token does not match the stored secret. |
 | `401 no_token` | Nothing was supplied. |
+| `429 too_many_attempts` | Ten failed attempts from that address in five minutes. A correct token still works — the lockout counts failures only, so nobody can spray the endpoint to knock you off your own board. |
 
 Leading and trailing whitespace is trimmed on both sides, so a secret that
 picked up a stray newline from the `wrangler secret put` prompt — which is easy
 to do by pasting or piping, and was the original cause of this — no longer
 breaks anything. If it still refuses, the stored value genuinely differs: set it
 again, typing rather than pasting.
+
+The token is typed on a phone in a dark room, so the field is a proper
+credential form: `type=password` with `autocomplete="current-password"` and a
+hidden username, which lets a password manager both fill and save it. Prefer a
+few words plus a short suffix over random hex — easier to type, and no `0`/`O`
+or `1`/`l`/`I` to squint at.
 
 ## Privacy
 

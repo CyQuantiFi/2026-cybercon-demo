@@ -222,6 +222,19 @@ async function moderation(request, env, path) {
     return json({ error: 'no_token' }, 401);
   }
   if (!(await secretEquals(supplied, env.MOD_TOKEN))) {
+    // Record the miss and lock the address out once it has burned through its
+    // allowance. Without this the moderation routes take unlimited guesses, and
+    // /api/mod/export?include=contacts hands back email addresses.
+    const ip = clientIp(request);
+    if (ip) {
+      const res = await sessionStub(env).fetch('https://session/authfail', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ ip })
+      });
+      const { locked } = await res.json().catch(() => ({ locked: false }));
+      if (locked) return json({ error: 'too_many_attempts' }, 429);
+    }
     return json({ error: 'bad_token' }, 401);
   }
 

@@ -1,20 +1,41 @@
 {
   "session": "cybercon-2026",
   "noticeVersion": "v2",
-
   "_comment": [
-    "Check both questions the week of the talk. If Q1 has already resolved,",
-    "set activeFrequency to 'q1b' — nothing else in the app needs to change."
+    "Check the active question the week of the talk. If it has already resolved,",
+    "or the dry run shows the room converging, switch activeFrequency to 'q1b'",
+    "(fourth party) or 'q1' (edge device) — nothing else in the app changes.",
+    "Whenever this changes, public/data/model-prompt.txt and scripts/seed-forecasts.json",
+    "must change with it, or Panel B and the pre-seeded histogram answer a different",
+    "question to the room."
   ],
-  "activeFrequency": "q1",
-
+  "activeFrequency": "q1ai",
   "frequency": {
+    "q1ai": {
+      "id": "q1ai",
+      "type": "binary",
+      "eyebrow": "Question 01 — frequency",
+      "display": "Before 2028, will an Australian organisation publicly attribute an incident to its AI agent?",
+      "text": "Before 31 December 2027, will an Australian organisation publicly attribute a material security incident to the compromise, manipulation or misuse of an AI assistant, agent or LLM integration that it operated?",
+      "answer": {
+        "kind": "probability",
+        "min": 0.01,
+        "max": 0.99,
+        "step": 0.01,
+        "default": 0.5
+      },
+      "resolutionDate": "2027-12-31",
+      "resolutionSource": "OAIC notifiable data breach reporting, an ASD/ACSC advisory, an ASX disclosure, the organisation's own public statement, or two independent news reports naming the organisation.",
+      "resolvesNoIf": "No such attribution is publicly documented by the date; or the only reports are unattributed vendor marketing; or the only incidents involve an attacker using AI against the organisation, rather than the organisation's own AI system being compromised, manipulated or misused.",
+      "ambiguityRule": "“An AI assistant, agent or LLM integration that it operated” = a system the organisation deployed or configured that uses a large language model to take actions, or to produce output relied on in a business process. Chatbots, copilots, agentic tooling, RAG systems and LLM features the organisation switched on inside software it runs are all in scope. An attacker’s own use of AI against the organisation — deepfakes, voice cloning, AI-written phishing — is out of scope, as is a model provider’s breach where the organisation was only a downstream user.",
+      "notePlaceholder": "e.g. Agents are everywhere already, but nobody names root cause publicly."
+    },
     "q1": {
       "id": "q1",
       "type": "binary",
       "eyebrow": "Question 01 — frequency",
+      "display": "Before 2028, will an internet-facing edge device be publicly reported as exploited against an Australian organisation?",
       "text": "Before 31 December 2027, will a vulnerability in an internet-facing edge device or remote-access appliance be added to CISA's Known Exploited Vulnerabilities catalogue and be publicly reported as exploited against at least one Australian organisation?",
-      "short": "Edge-device KEV exploitation against an Australian organisation",
       "answer": {
         "kind": "probability",
         "min": 0.01,
@@ -25,15 +46,15 @@
       "resolutionDate": "2027-12-31",
       "resolutionSource": "CISA KEV catalogue, plus any of: OAIC notifiable data breach reporting, ASD/ACSC advisory, ASX disclosure, or two independent news reports naming the organisation.",
       "resolvesNoIf": "No such pairing is publicly documented by the date, or the only reports are unattributed vendor marketing.",
-      "ambiguityRule": "“Edge device or remote-access appliance” = a network-boundary product whose management or VPN interface is reachable from the internet. Endpoint agents and SaaS applications are out of scope."
+      "ambiguityRule": "“Edge device or remote-access appliance” = a network-boundary product whose management or VPN interface is reachable from the internet. Endpoint agents and SaaS applications are out of scope.",
+      "notePlaceholder": "e.g. Three KEV additions for edge appliances in the last year alone."
     },
-
     "q1b": {
       "id": "q1b",
       "type": "binary",
       "eyebrow": "Question 01 — frequency",
+      "display": "Before mid-2027, will an Australian organisation publicly blame a supplier's supplier for a material incident?",
       "text": "Before 30 June 2027, will an Australian organisation publicly attribute a material incident to a compromise at a fourth party — a supplier of its supplier?",
-      "short": "Fourth-party compromise attributed by an Australian organisation",
       "answer": {
         "kind": "probability",
         "min": 0.01,
@@ -45,49 +66,92 @@
       "resolutionSource": "OAIC notifiable data breach reporting, ASD/ACSC advisory, ASX disclosure, or two independent news reports naming the organisation.",
       "resolvesNoIf": "No such attribution is publicly documented by the date, or the only reports are unattributed vendor marketing.",
       "ambiguityRule": "“Fourth party” = an organisation that supplies one of your direct suppliers, with no contract between it and the affected organisation. “Material” = disclosed by the organisation itself as affecting operations, customers or financial results.",
-      "useWhen": "Use this if Q1 feels too close to the audience's day job to produce genuine disagreement. The demo needs spread; a room that converges instantly has nothing to show."
+      "useWhen": "Use this if Q1 feels too close to the audience's day job to produce genuine disagreement. The demo needs spread; a room that converges instantly has nothing to show.",
+      "notePlaceholder": "e.g. Fourth-party compromise is constant; public attribution almost never is."
     }
   },
-
   "magnitude": {
     "id": "q2",
     "type": "three-point",
     "eyebrow": "Question 02 — magnitude",
+    "display": "What would that cost a mid-size Australian organisation in its first year?",
     "text": "For a mid-size Australian organisation (500–2,000 staff) hit by that event, what is the total first-year cost — response, downtime, legal, notification and remediation?",
-    "short": "First-year cost to a 500–2,000 staff Australian organisation",
     "optional": true,
     "currency": "AUD",
     "answer": {
       "kind": "three-point-log",
       "min": 10000,
       "max": 200000000,
-      "anchors": [50000, 500000, 5000000, 50000000],
-      "defaults": { "low": 250000, "mode": 900000, "high": 6000000 },
+      "anchors": [
+        50000,
+        500000,
+        5000000,
+        50000000
+      ],
+      "defaults": {
+        "low": 250000,
+        "mode": 900000,
+        "high": 6000000
+      },
       "fields": [
-        { "key": "low", "label": "Low", "hint": "10th percentile — it would surprise you to come in under this" },
-        { "key": "mode", "label": "Most likely", "hint": "Your single best guess" },
-        { "key": "high", "label": "High", "hint": "90th percentile — it would surprise you to go over this" }
+        {
+          "key": "low",
+          "label": "Low",
+          "hint": "10th percentile — it would surprise you to come in under this"
+        },
+        {
+          "key": "mode",
+          "label": "Most likely",
+          "hint": "Your single best guess"
+        },
+        {
+          "key": "high",
+          "label": "High",
+          "hint": "90th percentile — it would surprise you to go over this"
+        }
       ]
     },
     "resolutionDate": "2028-12-31",
     "resolutionSource": "Scored against published post-incident cost disclosures for comparable Australian incidents in the following year.",
-    "resolutionCaveat": "A slower and noisier resolution than the frequency question. Said out loud on the board rather than hidden."
+    "resolutionCaveat": "A slower and noisier resolution than the frequency question. Said out loud on the board rather than hidden.",
+    "detail": "500–2,000 staff · response, downtime, legal, notification, remediation"
   },
-
   "confidence": [
-    { "value": "low", "label": "Low" },
-    { "value": "med", "label": "Medium" },
-    { "value": "high", "label": "High" }
+    {
+      "value": "low",
+      "label": "Low"
+    },
+    {
+      "value": "med",
+      "label": "Medium"
+    },
+    {
+      "value": "high",
+      "label": "High"
+    }
   ],
-
   "roles": [
-    { "value": "leadership", "label": "Security leadership" },
-    { "value": "risk", "label": "Risk & GRC" },
-    { "value": "engineering", "label": "Engineering" },
-    { "value": "vendor", "label": "Vendor" },
-    { "value": "other", "label": "Other" }
+    {
+      "value": "leadership",
+      "label": "Security leadership"
+    },
+    {
+      "value": "risk",
+      "label": "Risk & GRC"
+    },
+    {
+      "value": "engineering",
+      "label": "Engineering"
+    },
+    {
+      "value": "vendor",
+      "label": "Vendor"
+    },
+    {
+      "value": "other",
+      "label": "Other"
+    }
   ],
-
   "privacy": {
     "entity": "CyQuantiFi",
     "contact": "privacy@cyquantifi.com",
@@ -95,8 +159,14 @@
     "noticeVersion": "v2",
     "notice": "Your forecast is anonymous. Giving us your email is optional and it is not stored with your forecast. CyQuantiFi collects it only to do what you tick below. We handle it under the Australian Privacy Principles; it is processed on Cloudflare infrastructure that may be located outside Australia, and the outcome notice is sent using Gmail (Google LLC), also outside Australia. You can ask us to give you access to it, correct it or delete it at any time at privacy@cyquantifi.com.",
     "consents": [
-      { "key": "outcome", "label": "Tell me how this question resolved" },
-      { "key": "marketing", "label": "Send me other CyQuantiFi updates, including product and marketing" }
+      {
+        "key": "outcome",
+        "label": "Tell me how this question resolved"
+      },
+      {
+        "key": "marketing",
+        "label": "Send me other CyQuantiFi updates, including product and marketing"
+      }
     ]
   }
 }

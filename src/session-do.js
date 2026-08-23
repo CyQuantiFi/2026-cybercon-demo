@@ -43,6 +43,21 @@ import { buildAggregate } from '../public/js/aggregate.js';
 const RATE_LIMIT = 600;
 const RATE_WINDOW_MS = 60_000;
 
+/**
+ * Failed moderation auth attempts per IP.
+ *
+ * The forecast ceiling above only ever guards submit(), so until now every
+ * /api/mod/* request bypassed rate limiting entirely — unlimited guesses at
+ * MOD_TOKEN, on routes where /api/mod/export?include=contacts returns email
+ * addresses and consent records.
+ *
+ * Only failures are counted. A correct token always gets through, because
+ * locking out on volume alone would let anyone knock the presenter off their
+ * own board mid-talk by spraying the endpoint.
+ */
+const AUTH_FAIL_LIMIT = 10;
+const AUTH_FAIL_WINDOW_MS = 5 * 60_000;
+
 export class SessionDO extends DurableObject {
   constructor(ctx, env) {
     super(ctx, env);
@@ -51,6 +66,8 @@ export class SessionDO extends DurableObject {
     this.hits = new Map();
     /** Ids already charged against an address, so a retry is never charged twice. */
     this.charged = new Set();
+    /** @type {Map<string, number[]>} failed moderation auth attempts per address */
+    this.authFails = new Map();
     this.aggregate = null;
     this.model = null;
 
@@ -97,28 +114,47 @@ export class SessionDO extends DurableObject {
   }
 
   /**
-   * The model participant is a static artefact by default (§5): run the morning
-   * of the talk, cached, and served without a live call. It is copied into meta
-   * on first boot so the aggregate does not need a fetch on every poll.
+   * Load the model participant (§5): an artefact produced by `npm run model`
+   * the morning of the talk, deployed as a static asset, and served without a
+   * live call.
+   *
+   * The deployed asset is authoritative and is re-read on every boot. It used
+   * to be copied into `meta` once and never looked at again, which meant
+   * running the model and redeploying left Panel B serving the previous
+   * forecast forever — including, after a question change, a forecast of a
+   * different question to the one the room answered, presented beside the crowd
+   * as though the two were comparable.
+   *
+   * A live re-run via the board's R key writes to `meta` and stands for the
+   * life of this instance. If the Durable Object is evicted and reboots, the
+   * deployed artefact wins again — which matches §5 making the cached artefact
+   * the default path and the live re-run optional theatre.
    */
   async loadModel() {
+    let cached = null;
     const stored = this.sql.exec('SELECT v FROM meta WHERE k = ?', 'model').toArray();
     if (stored.length > 0) {
       try {
-        this.model = JSON.parse(stored[0].v);
-        return;
+        cached = JSON.parse(stored[0].v);
       } catch {
-        /* fall through and re-read the artefact */
+        /* corrupt cache; the asset below replaces it */
       }
     }
+
+    let asset = null;
     try {
       const res = await this.env.ASSETS.fetch('https://assets.local/data/model.json');
-      if (res.ok) this.setModel(await res.json());
+      if (res.ok) asset = await res.json();
     } catch (err) {
-      // Not fatal. Panel B simply has nothing to show, and Panel C falls back
-      // to the crowd alone.
+      // Not fatal. Panel B shows nothing and Panel C falls back to the crowd.
       console.error('could not load cached model artefact', err);
     }
+
+    if (asset && (!cached || asset.ranAt !== cached.ranAt || asset.p !== cached.p)) {
+      this.setModel(asset);
+      return;
+    }
+    this.model = cached ?? asset;
   }
 
   setModel(model) {
@@ -136,6 +172,7 @@ export class SessionDO extends DurableObject {
     if (path === '/export') return this.export(request);
     if (path === '/model') return this.storeModel(request);
     if (path === '/counts') return this.json(this.counts());
+    if (path === '/authfail') return this.authFail(request);
     if (path === '/reset') return this.reset();
 
     return this.json({ error: 'not_found' }, 404);
@@ -305,18 +342,48 @@ export class SessionDO extends DurableObject {
    * output of the run you did that morning, and losing it would mean running
    * the model again for no reason.
    */
-  reset() {
+  async reset() {
     const before = this.counts();
     this.sql.exec('DELETE FROM forecasts');
     this.sql.exec('DELETE FROM notes');
     this.sql.exec('DELETE FROM emails');
     this.hits.clear();
     this.charged.clear();
+    this.authFails.clear();
+
+    // Re-read the deployed artefact as well, so a reset genuinely returns the
+    // session to what the deployment says rather than keeping a live re-run
+    // from an earlier rehearsal.
+    this.sql.exec('DELETE FROM meta WHERE k = ?', 'model');
+    await this.loadModel();
+
     this.recompute();
     return this.json({ ok: true, deleted: before, aggregate: this.aggregate });
   }
 
   /* --- helpers ---------------------------------------------------------- */
+
+  /**
+   * Record a failed moderation auth from this address and report whether it is
+   * now locked out. Same sliding-window shape as the forecast ceiling rather
+   * than a second mechanism to reason about.
+   */
+  async authFail(request) {
+    const { ip } = await request.json();
+    if (!ip) return this.json({ locked: false });
+
+    const now = Date.now();
+    const recent = (this.authFails.get(ip) ?? []).filter((t) => now - t < AUTH_FAIL_WINDOW_MS);
+    recent.push(now);
+    this.authFails.set(ip, recent);
+
+    if (this.authFails.size > 5000) {
+      for (const [key, times] of this.authFails) {
+        if (times.every((t) => now - t >= AUTH_FAIL_WINDOW_MS)) this.authFails.delete(key);
+      }
+    }
+    return this.json({ locked: recent.length >= AUTH_FAIL_LIMIT });
+  }
 
   /** Read-only: is this address already at its ceiling for the window? */
   overLimit(ip) {

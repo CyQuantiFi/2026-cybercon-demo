@@ -1,47 +1,47 @@
 {
   "_comment": "Bundled fallback for the presenter board. ?offline=1 runs the whole narration off this.",
-  "builtAt": 1786786307037,
+  "builtAt": 1787476976457,
   "source": "seed file",
   "aggregate": {
     "n": 20,
     "seeded": 20,
     "crowd": {
       "n": 20,
-      "median": 0.8981633034297372,
-      "p25": 0.7748450982898893,
-      "p75": 0.9554445884458334,
-      "rawMedian": 0.8102016424219542,
+      "median": 0.440063691309285,
+      "p25": 0.1862597634598951,
+      "p75": 0.7269263318779597,
+      "rawMedian": 0.45993548319961003,
       "histogram": [
         0,
         0,
-        0,
-        0,
-        0,
-        0,
-        0,
         1,
-        0,
+        2,
         1,
-        0,
+        2,
+        1,
+        1,
+        2,
+        1,
         1,
         1,
         1,
         2,
+        1,
+        1,
+        0,
         2,
-        3,
-        3,
-        3,
-        2
+        0,
+        0
       ]
     },
     "magnitude": {
       "n": 20,
-      "low": 299999.9999999999,
-      "mode": 1048808.8481701515,
-      "high": 6745368.781616016
+      "low": 194935.88689617955,
+      "mode": 724568.8373094723,
+      "high": 5138093.03146605
     },
     "model": {
-      "p": 0.72,
+      "p": 0.5,
       "baseRate": "Placeholder — no model call has been made yet.",
       "reasons": [
         "Run `npm run model` to replace this with a real forecast.",
@@ -52,10 +52,10 @@
       "placeholder": true
     },
     "ensemble": {
-      "p": 0.8264568589206819,
+      "p": 0.46992340872399624,
       "band": [
-        0.7484133678016945,
-        0.8813160663468715
+        0.32360590390382127,
+        0.6199984785777454
       ],
       "weights": {
         "crowd": 0.5,
@@ -63,118 +63,118 @@
       }
     },
     "divergence": {
-      "gap": -1.2325197790251317,
-      "direction": "model-lower",
-      "label": "The room is materially more pessimistic than the model. That gap is the most useful thing on this screen — it marks the assumption worth arguing about."
+      "gap": 0.24090357336781876,
+      "direction": "model-higher",
+      "label": "The room and the model agree. That is a weaker signal than it looks — agreement is only informative once both have a track record."
     },
     "byRole": {
-      "leadership": {
-        "n": 4,
-        "median": 0.9586019068970271
-      },
-      "risk": {
-        "n": 5,
-        "median": 0.9232496774217047
-      },
       "engineering": {
         "n": 5,
         "median": 0.8697216111777915
       },
+      "risk": {
+        "n": 5,
+        "median": 0.13027838882220844
+      },
+      "leadership": {
+        "n": 4,
+        "median": 0.5375548936559561
+      },
       "vendor": {
         "n": 3,
-        "median": 0.8386095222035911
+        "median": 0.2832171916339916
       },
       "other": {
         "n": 3,
-        "median": 0.6757530623048726
+        "median": 0.19518063257433954
       }
     },
     "byConfidence": {
       "high": {
         "n": 6,
-        "median": 0.9586019068970271
+        "median": 0.7813712081901396
       },
       "med": {
         "n": 9,
-        "median": 0.8888888888888888
+        "median": 0.2832171916339916
       },
       "low": {
         "n": 5,
-        "median": 0.6187297366915497
+        "median": 0.3524704450894247
       }
     },
     "notes": [
       {
-        "note": "Three separate edge appliances hit KEV in the last eighteen months. The base rate alone gets you most of the way there.",
-        "role": "leadership",
-        "q1": 0.88,
-        "ts": 1786786307036
+        "note": "Agents with tool access and no egress control are everywhere already. Something has gone wrong; the question is whether anyone says so.",
+        "role": "engineering",
+        "q1": 0.72,
+        "ts": 1787476976456
       },
       {
-        "note": "The binding constraint is public attribution, not exploitation. Plenty happens that nobody names.",
+        "note": "Organisations barely disclose root cause for ordinary breaches. 'Our agent was manipulated' is a sentence nobody wants to be first to say.",
         "role": "risk",
-        "q1": 0.82,
-        "ts": 1786786307036
+        "q1": 0.18,
+        "ts": 1787476976456
       },
       {
-        "note": "Two years is a long window and OAIC reporting has been getting more specific, not less.",
-        "role": "engineering",
-        "q1": 0.93,
-        "ts": 1786786307036
-      },
-      {
-        "note": "Everyone is anchoring on exploitation. The question asks for a named Australian victim, and that pairing is genuinely rarer than it feels.",
-        "role": "risk",
-        "q1": 0.45,
-        "ts": 1786786307036
-      },
-      {
-        "note": "ASD advisories have named sectors before. It only takes one ASX-listed disclosure to resolve this.",
+        "note": "Two years is long enough for one board to decide candour is cheaper than speculation.",
         "role": "leadership",
-        "q1": 0.9,
-        "ts": 1786786307036
+        "q1": 0.55,
+        "ts": 1787476976456
       },
       {
-        "note": "Edge devices are where the unpatchable stuff lives. Nobody reboots the VPN concentrator.",
+        "note": "Prompt injection is not speculative — it is a documented failure class with working exploits. Deployment is racing ahead of the controls.",
         "role": "engineering",
-        "q1": 0.78,
-        "ts": 1786786307036
+        "q1": 0.85,
+        "ts": 1787476976456
       },
       {
-        "note": "Attribution is the hard part. Australian organisations disclose the breach and stay quiet about the vector.",
-        "role": "other",
-        "q1": 0.62,
-        "ts": 1786786307036
+        "note": "Everyone is answering a different question. Attacker-side AI is excluded, and once you strip that out there is almost nothing left.",
+        "role": "risk",
+        "q1": 0.12,
+        "ts": 1787476976456
       },
       {
-        "note": "I would take the other side of anything under 90% here.",
+        "note": "Copilots with mailbox and repo access are one misconfiguration from an incident, and plenty are one misconfiguration away today.",
         "role": "engineering",
-        "q1": 0.95,
-        "ts": 1786786307036
+        "q1": 0.65,
+        "ts": 1787476976456
       },
       {
-        "note": "Vendor disclosure timelines are the rate limiter, and they are slow by design.",
+        "note": "OAIC narratives are thin on cause. Even if it happens, the public record will say 'unauthorised access' and stop there.",
+        "role": "risk",
+        "q1": 0.22,
+        "ts": 1787476976456
+      },
+      {
+        "note": "Genuinely no idea. No base rate, no comparable, and the disclosure norms are being written as we go.",
+        "role": "leadership",
+        "q1": 0.5,
+        "ts": 1787476976456
+      },
+      {
+        "note": "Vendors will describe it as a customer configuration issue, which keeps it out of the resolution criteria.",
         "role": "vendor",
-        "q1": 0.7,
-        "ts": 1786786307036
-      },
-      {
-        "note": "Reading the ambiguity rule closely, endpoint agents are excluded and that removes most of what I was thinking of.",
-        "role": "other",
         "q1": 0.35,
-        "ts": 1786786307036
+        "ts": 1787476976456
       },
       {
-        "note": "Two independent news reports is a low bar. This resolves on a quiet Tuesday and nobody notices.",
+        "note": "Someone will disclose it precisely because AI makes it newsworthy rather than embarrassing. The incentive runs the other way here.",
         "role": "leadership",
-        "q1": 0.91,
-        "ts": 1786786307036
+        "q1": 0.6,
+        "ts": 1787476976456
       },
       {
-        "note": "It has probably already happened and we are waiting on the paperwork.",
-        "role": "vendor",
-        "q1": 0.99,
-        "ts": 1786786307036
+        "note": "Attribution to a specific system requires forensics most organisations do not do and would not publish.",
+        "role": "other",
+        "q1": 0.15,
+        "ts": 1787476976456
+      },
+      {
+        "note": "I would take the other side of anything under 60%. Agent adoption in 2026 is faster than any control cycle I have seen.",
+        "role": "engineering",
+        "q1": 0.88,
+        "ts": 1787476976456
       }
     ],
     "method": {
@@ -188,6 +188,6 @@
         0.99
       ]
     },
-    "updated": 1786786307036
+    "updated": 1787476976456
   }
 }
