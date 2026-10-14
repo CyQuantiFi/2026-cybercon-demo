@@ -31,10 +31,10 @@ Then open:
 | `/` or `/f` | participant app — the QR target |
 | `/board` | presenter board, authored at 1920×1080 and scaled to fit |
 | `/board?offline=1` | the same board running entirely off the bundled snapshot |
-| `/mod` | moderation view — paste the token, one tap to approve |
+| `/mod` | moderation view — paste the token, one tap to approve, reset at the bottom |
 | `/privacy` | privacy policy |
 
-`npm test` runs 43 unit tests over the aggregation and the Monte Carlo.
+`npm test` runs 51 unit tests over the aggregation, the Monte Carlo and the moderation token comparison.
 
 ## Architecture
 
@@ -42,10 +42,11 @@ One Cloudflare Worker with static assets. Assets are matched first; anything
 that is not a file on disk falls through to `src/index.js`.
 
 ```
-POST /api/f      append or edit a forecast          ← the two routes 150 phones hit
-GET  /api/agg    read the aggregate (ETag, 2s poll)
-POST /api/mod/*  moderation, token-gated            ← one phone, off the hot path
-POST /api/model/rerun   optional live model call
+POST /api/f            append or edit a forecast     ← the two routes 150 phones hit
+GET  /api/agg          read the aggregate (ETag, 2s poll)
+GET  /api/mod/health   is MOD_TOKEN set? no token needed
+GET/POST /api/mod/*    moderation, token-gated       ← one phone, off the hot path
+POST /api/model/rerun  optional live model call
 ```
 
 **Storage** is a Durable Object (`src/session-do.js`) with SQLite, not KV: the
@@ -70,11 +71,18 @@ Arial.
   permit defining a Durable Object inside a Pages project, so §5 as written
   needs two deploys and a cross-script binding. This is one deploy with the same
   static files, the same two routes and the same DO.
-- **Per-IP rate limit is 240/minute, not tight.** Venue Wi-Fi NATs the entire
-  room behind a handful of addresses. A tight per-IP cap does not stop a ballot
-  stuffer; it locks out the audience, at exactly the moment the board is on
-  screen. The real controls are one-forecast-per-client-id with edit-in-place,
-  and Turnstile. See the comment in `src/session-do.js`.
+- **The rate limit counts distinct client ids, not requests.** Venue Wi-Fi NATs
+  the whole room behind a handful of addresses, so every phone shares one
+  counter. Counting requests would put ~150 forecasts, the second write from
+  anyone who leaves an email, and every retry through bad Wi-Fi into the same
+  bucket — comfortably over a few hundred in the minute after "scan now", and
+  the 429s would be silent while the board's counter stalled. Since every write
+  is `INSERT OR REPLACE` on a client uuid, only a previously unseen id can add a
+  row, so only that is charged: retries, edits and the email step are free, and
+  the 600/minute ceiling protects the one thing it should, a script inventing
+  fresh uuids. A rejected id is remembered so its retries are re-evaluated but
+  never re-charged — otherwise the room's own retry loop would hold the bucket
+  full and extend its own lockout. See `src/session-do.js`.
 - **The moderation and model-rerun routes exist** beyond §5's "two routes,
   nothing else". That budget is about the hot path; these are used by one phone
   in your pocket and one keypress.
@@ -101,9 +109,12 @@ Turnstile also needs its public half in `wrangler.jsonc` under
 ## Deploy
 
 ```bash
-npx wrangler kv namespace create AGG_KV     # paste the id into wrangler.jsonc
 npm run deploy
 ```
+
+The KV namespace already exists (`cybercon-2026-demo-AGG_KV`,
+`8d32bd288aa54ee29866461d9b17b56a`) and its id is in `wrangler.jsonc`. The
+Durable Object and its migration are created by the first deploy.
 
 Point a custom domain at it and make the QR target a short path — `/f` is
 already wired and answers without a redirect.
@@ -112,8 +123,20 @@ already wired and answers without a redirect.
 
 **A week out**
 
-1. Check both questions. If Q1 has already resolved, set `activeFrequency` to
-   `"q1b"` in `public/data/questions.json`. Nothing else changes.
+1. Check the active question. If it has already resolved, or the dry run shows
+   the room converging, switch `activeFrequency` in `public/data/questions.json`
+   to `q1b` (fourth party) or `q1` (edge device).
+
+   **Changing the question is three files, not one.** The question set, the
+   model prompt and the seed data all name the same subject, and two of them
+   fail silently if left behind:
+   - `public/data/questions.json` — `activeFrequency`
+   - `public/data/model-prompt.txt` — otherwise Panel B forecasts a *different
+     question* to the room and the board presents them side by side as
+     comparable. `node scripts/model-participant.mjs --check` catches this.
+   - `scripts/seed-forecasts.json` — otherwise the board opens pre-seeded with
+     opinions about something else. `npm run seed` now refuses outright when
+     `answersQuestion` does not match `activeFrequency`.
 2. Dry run with 20+ real people. Keep that data:
    `node scripts/snapshot.mjs --from-live https://your.domain --token $MOD_TOKEN`
    — it becomes both the seed and the offline snapshot.
@@ -128,12 +151,16 @@ already wired and answers without a redirect.
    and that the prompt has not changed since it was made.
    **The artefact in the repo is a placeholder and the board says so in pink on
    Panel B until you replace it.**
-5. `npm run seed -- https://your.domain` so the histogram is never empty.
-6. Open `/board` in the same browser as the deck. Open `/mod` on your phone.
+5. `npm run check -- https://your.domain --token $MOD_TOKEN` — verifies the
+   served bytes still match the repo, the aggregate leaks nothing, the snapshot
+   is populated, and your moderation token actually works. Run it *before* you
+   need any of that to be true on stage.
+6. `npm run seed -- https://your.domain` so the histogram is never empty.
+7. Open `/board` in the same browser as the deck. Open `/mod` on your phone.
 
 **Rehearse the failure path, not just the happy one**
 
-7. Open `/board?offline=1` and run the whole narration with the network off.
+8. Open `/board?offline=1` and run the whole narration with the network off.
    That is the path §9 says to rehearse, and it is the one you will be glad of.
 
 **On stage**
@@ -164,6 +191,76 @@ account's daily recipient cap first (2,000/day on Workspace, 500/day consumer).
 
 This step is what turns a demo into a track record; it is the only part of this
 repo that matters in a year.
+
+## Resetting the session
+
+`/mod` has a **Reset the session** panel at the bottom, collapsed and behind a
+typed confirmation. It drops every forecast, every line of reasoning and every
+email address, so the room starts at a real zero — for clearing rehearsal and
+test data before the talk. The confirmation names the exact counts first, and
+there is no undo. The model artefact survives, so you do not have to re-run it.
+
+It also clears the KV mirror, which is the fallback the board reads when the
+Durable Object is briefly unreachable — otherwise a wiped session could
+reappear on screen.
+
+**Phones notice too.** A reset empties the server, but every participant's
+forecast also lives in their own `localStorage`, so without help a phone goes on
+showing the submitted screen — and its position against a crowd — for a forecast
+the server has never heard of. The aggregate carries a session `epoch` that
+changes on every reset; a phone holding a forecast from an older epoch clears its
+local state, returns to the question and says why. You will hit this first while
+rehearsing on your own phone.
+
+## Choosing a question
+
+The demo needs the room to **disagree**. §2: *"If the crowd converges instantly,
+the demo has nothing to show — spread is the point."* Panel A is a histogram of
+exactly that, and a question the room already agrees on produces a bar banked
+against one edge and a dead half-screen.
+
+The original edge-device question failed this: the panel round came back median
+80%, IQR 68–88%, with only 2 of 20 below 50%. The active question is now the
+AI-agent one, which has no base rate for anyone to pattern-match against.
+
+**Judge a candidate by its histogram, not by how interesting it sounds.** After
+the dry run, if the IQR is narrower than about 20 points, or either outer third
+of the histogram is empty, use the backup instead.
+
+The AI-agent question carries one load-bearing exclusion: an *attacker* using AI
+against the organisation does not count — deepfakes, cloned voices and
+AI-written phishing are all out of scope. Only the organisation's **own** AI
+being compromised, manipulated or misused qualifies. Without that line the
+question resolves YES immediately and the spread collapses. It is in the
+ambiguity rule, in the model prompt, and it is worth saying out loud on stage.
+
+## When /mod says the token is wrong
+
+Ask the deployment which of the three things it is — the endpoint distinguishes
+them, and needs no token to answer:
+
+```bash
+curl https://your.domain/api/mod/health      # {"configured":true|false}
+```
+
+| What you see | What it means |
+|---|---|
+| `{"configured":false}`, or `503 not_configured` | The secret was never set on this deployment. `npx wrangler secret put MOD_TOKEN`, then redeploy. |
+| `401 bad_token` | The token does not match the stored secret. |
+| `401 no_token` | Nothing was supplied. |
+| `429 too_many_attempts` | Ten failed attempts from that address in five minutes. A correct token still works — the lockout counts failures only, so nobody can spray the endpoint to knock you off your own board. |
+
+Leading and trailing whitespace is trimmed on both sides, so a secret that
+picked up a stray newline from the `wrangler secret put` prompt — which is easy
+to do by pasting or piping, and was the original cause of this — no longer
+breaks anything. If it still refuses, the stored value genuinely differs: set it
+again, typing rather than pasting.
+
+The token is typed on a phone in a dark room, so the field is a proper
+credential form: `type=password` with `autocomplete="current-password"` and a
+hidden username, which lets a password manager both fill and save it. Prefer a
+few words plus a short suffix over random hex — easier to type, and no `0`/`O`
+or `1`/`l`/`I` to squint at.
 
 ## Privacy
 

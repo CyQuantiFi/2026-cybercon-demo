@@ -1,7 +1,7 @@
 {
   "_comment": "PLACEHOLDER. Overwritten by `npm run model` on the morning of the talk. It exists so the board renders Panel B before the real call has been made, and it is flagged so it cannot be mistaken for a real forecast on stage.",
   "placeholder": true,
-  "p": 0.72,
+  "p": 0.5,
   "baseRate": "Placeholder — no model call has been made yet.",
   "reasons": [
     "Run `npm run model` to replace this with a real forecast.",

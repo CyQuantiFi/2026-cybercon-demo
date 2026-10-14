@@ -27,6 +27,8 @@ const state = {
   forecast: { id: uuid(), q1: 0.5, q2: null, note: null, confidence: 'med', role: null },
   submitted: false,
   aggregate: null,
+  /** Which session this phone's forecast belongs to. See discardIfSessionReset. */
+  epoch: null,
   pollTimer: null,
   flushTimer: null
 };
@@ -57,6 +59,7 @@ function restore() {
     if (saved && saved.forecast && typeof saved.forecast.id === 'string') {
       state.forecast = { ...state.forecast, ...saved.forecast };
       state.submitted = saved.submitted === true;
+      state.epoch = saved.epoch ?? null;
     }
   } catch {
     /* corrupt storage is not worth a broken app; start fresh */
@@ -65,7 +68,10 @@ function restore() {
 
 function persist() {
   try {
-    localStorage.setItem(STORE_KEY, JSON.stringify({ forecast: state.forecast, submitted: state.submitted }));
+    localStorage.setItem(
+      STORE_KEY,
+      JSON.stringify({ forecast: state.forecast, submitted: state.submitted, epoch: state.epoch })
+    );
   } catch {
     /* private browsing with storage disabled — the retry loop still works
        in-memory for the life of the page */
@@ -126,12 +132,20 @@ function wire() {
 function renderQuestion() {
   const q = state.frequency;
   $('q1Eyebrow').textContent = q.eyebrow;
-  $('q1Text').textContent = q.text;
+  // The headline is the short form; the full claim — the thing actually scored,
+  // and the thing scripts/score.mjs quotes back a year later — sits one tap
+  // away rather than being deleted to save space.
+  $('q1Text').textContent = q.display ?? q.text;
+  $('q1Claim').textContent = q.text;
   $('q1Date').textContent = formatDate(q.resolutionDate);
   $('q1Source').textContent = q.resolutionSource;
   $('q1No').textContent = q.resolvesNoIf;
   $('q1Scope').textContent = q.ambiguityRule;
   $('resolveDate').textContent = formatDate(q.resolutionDate);
+  // Driven by the question set too. A hardcoded example about edge appliances
+  // survived a question change once already; anything that names the subject
+  // belongs next to the subject.
+  if (q.notePlaceholder) $('note').placeholder = q.notePlaceholder;
 }
 
 /* --- screen 2: reasoning --------------------------------------------------- */
@@ -157,7 +171,8 @@ function renderConfidence() {
  */
 function renderMagnitude() {
   const q2 = state.questions.magnitude;
-  $('q2Text').textContent = q2.text;
+  $('q2Text').textContent = q2.display ?? q2.text;
+  if (q2.detail) $('q2Detail').textContent = q2.detail;
 
   const { min, max, defaults, fields, anchors } = q2.answer;
   const current = state.forecast.q2 ?? { ...defaults };
@@ -406,11 +421,64 @@ function stopPolling() {
   state.pollTimer = null;
 }
 
+/**
+ * Notice that the session this phone answered no longer exists.
+ *
+ * Resetting from /mod empties the server, but every participant's forecast also
+ * lives in their own localStorage — so without this a phone goes on showing the
+ * submitted screen, and its position against a crowd, for a forecast the server
+ * has never heard of. The presenter hits it first while rehearsing; the audience
+ * would hit it if a reset happened after anyone had scanned.
+ *
+ * A forecast saved before this field existed has no epoch at all, and is treated
+ * as stale for the same reason: we cannot show it is still in the session.
+ */
+function discardIfSessionReset(aggregate) {
+  if (!state.submitted || !aggregate || !aggregate.epoch) return false;
+  if (state.epoch === aggregate.epoch) return false;
+
+  try {
+    localStorage.removeItem(STORE_KEY);
+    localStorage.removeItem(QUEUE_KEY);
+  } catch {
+    /* storage unavailable; the in-memory reset below still applies */
+  }
+
+  state.forecast = { id: uuid(), q1: 0.5, q2: null, note: null, confidence: 'med', role: null };
+  state.submitted = false;
+  state.epoch = aggregate.epoch;
+  state.aggregate = aggregate;
+
+  // Put the controls back to their starting state by hand. Re-running wire()
+  // would bind a second set of listeners to every button and make each tap fire
+  // twice for the rest of the session.
+  const slider = $('q1Slider');
+  slider.value = '50';
+  $('q1Value').textContent = '50%';
+  $('note').value = '';
+  $('noteCount').textContent = '0';
+  $('email').value = '';
+  $('consentOutcome').checked = false;
+  $('consentMarketing').checked = false;
+  $('emailSubmit').disabled = false;
+  $('emailSubmit').textContent = 'Send it to me';
+  $('emailError').hidden = true;
+
+  renderConfidence();
+  renderMagnitude();
+  renderRoles();
+  show('question');
+  setStatus('The session was reset — your earlier forecast is no longer counted. Please answer again.', 'pending');
+  return true;
+}
+
 async function poll() {
   try {
     const res = await fetch('/api/agg', { cache: 'no-store' });
     if (!res.ok) return;
-    state.aggregate = await res.json();
+    const aggregate = await res.json();
+    if (discardIfSessionReset(aggregate)) return;
+    state.aggregate = aggregate;
     if (state.screen === 'done') renderCrowdComparison();
     if (state.screen === 'live') renderLive();
   } catch {
@@ -482,6 +550,11 @@ async function flushPending() {
       const data = await res.json();
       if (data.aggregate) {
         state.aggregate = data.aggregate;
+        // Remember which session accepted this, so a later reset is detectable.
+        if (data.aggregate.epoch) {
+          state.epoch = data.aggregate.epoch;
+          persist();
+        }
         if (state.screen === 'done') renderCrowdComparison();
         if (state.screen === 'live') renderLive();
       }
