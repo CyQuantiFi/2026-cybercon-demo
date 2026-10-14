@@ -16,20 +16,48 @@
 
 import { DurableObject } from 'cloudflare:workers';
 import { buildAggregate } from '../public/js/aggregate.js';
+import { engineSummary } from '../public/js/decision-engine.js';
 
 /**
- * Per-IP submission limit (§9, spam / ballot stuffing).
+ * Per-IP limit on *new* forecasts (§9, spam / ballot stuffing).
  *
- * Set high on purpose. Venue Wi-Fi NATs the entire room behind a handful of
- * public addresses, so a tight per-IP cap does not stop a ballot stuffer — it
- * locks out the audience, and it does so exactly when the board is on screen.
- * The controls that actually do the work are one-forecast-per-client-id with
- * edit-in-place, and Turnstile. This ceiling exists to stop a scripted flood
- * from filling the append log, and 240/minute is far above what ~150 people
- * behind one NAT can produce by hand.
+ * Counted per distinct client id, not per request, and that distinction is the
+ * whole point. Venue Wi-Fi NATs the entire room behind a handful of public
+ * addresses, so every phone shares one counter. Counting requests would put a
+ * roomful of people into one bucket alongside their own retries:
+ *
+ *   ~150 forecasts, plus a second write each for anyone who leaves an email,
+ *   plus however many times the retry loop re-POSTs through bad venue Wi-Fi.
+ *
+ * That is comfortably over a few hundred requests in the minute after "scan
+ * now", and the failure is silent — a 429 makes the client back off 1s, 2s, 4s,
+ * 8s, so the forecast lands eventually but the counter on the board stalls
+ * during exactly the window the presenter is pointing at it.
+ *
+ * Every write is INSERT OR REPLACE on a client-generated uuid, so repeated
+ * writes with the same id cannot grow the table — they are updates. Only a
+ * previously unseen id costs anything, which makes retries, edits and the
+ * email step free, and leaves the ceiling protecting the one thing it should:
+ * a script inventing fresh uuids. 150 people cannot hand-produce 600 distinct
+ * forecasts in a minute; a script can, and Turnstile is the control for that.
  */
-const RATE_LIMIT = 240;
+const RATE_LIMIT = 600;
 const RATE_WINDOW_MS = 60_000;
+
+/**
+ * Failed moderation auth attempts per IP.
+ *
+ * The forecast ceiling above only ever guards submit(), so until now every
+ * /api/mod/* request bypassed rate limiting entirely — unlimited guesses at
+ * MOD_TOKEN, on routes where /api/mod/export?include=contacts returns email
+ * addresses and consent records.
+ *
+ * Only failures are counted. A correct token always gets through, because
+ * locking out on volume alone would let anyone knock the presenter off their
+ * own board mid-talk by spraying the endpoint.
+ */
+const AUTH_FAIL_LIMIT = 10;
+const AUTH_FAIL_WINDOW_MS = 5 * 60_000;
 
 export class SessionDO extends DurableObject {
   constructor(ctx, env) {
@@ -37,12 +65,19 @@ export class SessionDO extends DurableObject {
     this.sql = ctx.storage.sql;
     /** @type {Map<string, number[]>} in-memory, single instance, no binding needed */
     this.hits = new Map();
+    /** Ids already charged against an address, so a retry is never charged twice. */
+    this.charged = new Set();
+    /** @type {Map<string, number[]>} failed moderation auth attempts per address */
+    this.authFails = new Map();
     this.aggregate = null;
     this.model = null;
+    this.engine = null;
 
     ctx.blockConcurrencyWhile(async () => {
       this.migrate();
+      this.loadEpoch();
       await this.loadModel();
+      await this.loadEngine();
       this.recompute();
     });
   }
@@ -83,33 +118,112 @@ export class SessionDO extends DurableObject {
   }
 
   /**
-   * The model participant is a static artefact by default (§5): run the morning
-   * of the talk, cached, and served without a live call. It is copied into meta
-   * on first boot so the aggregate does not need a fetch on every poll.
+   * The session epoch changes whenever the session is emptied.
+   *
+   * A reset clears the server, but every participant's phone still holds its
+   * own forecast in localStorage and would go on showing the submitted screen
+   * for a forecast the server no longer has. The epoch travels in the aggregate
+   * so a phone can notice that the session it answered no longer exists.
+   */
+  loadEpoch() {
+    const row = this.sql.exec('SELECT v FROM meta WHERE k = ?', 'epoch').toArray();
+    if (row.length > 0) {
+      this.epoch = Number(row[0].v);
+      return;
+    }
+    this.bumpEpoch();
+  }
+
+  bumpEpoch() {
+    this.epoch = Date.now();
+    this.sql.exec('INSERT OR REPLACE INTO meta (k, v) VALUES (?, ?)', 'epoch', String(this.epoch));
+  }
+
+  /**
+   * Load the model participant (§5): an artefact produced by `npm run model`
+   * the morning of the talk, deployed as a static asset, and served without a
+   * live call.
+   *
+   * The deployed asset is authoritative and is re-read on every boot. It used
+   * to be copied into `meta` once and never looked at again, which meant
+   * running the model and redeploying left Panel B serving the previous
+   * forecast forever — including, after a question change, a forecast of a
+   * different question to the one the room answered, presented beside the crowd
+   * as though the two were comparable.
+   *
+   * A live re-run via the board's R key writes to `meta` and stands for the
+   * life of this instance. If the Durable Object is evicted and reboots, the
+   * deployed artefact wins again — which matches §5 making the cached artefact
+   * the default path and the live re-run optional theatre.
    */
   async loadModel() {
+    let cached = null;
     const stored = this.sql.exec('SELECT v FROM meta WHERE k = ?', 'model').toArray();
     if (stored.length > 0) {
       try {
-        this.model = JSON.parse(stored[0].v);
-        return;
+        cached = JSON.parse(stored[0].v);
       } catch {
-        /* fall through and re-read the artefact */
+        /* corrupt cache; the asset below replaces it */
       }
     }
+
+    let asset = null;
     try {
       const res = await this.env.ASSETS.fetch('https://assets.local/data/model.json');
-      if (res.ok) this.setModel(await res.json());
+      if (res.ok) asset = await res.json();
     } catch (err) {
-      // Not fatal. Panel B simply has nothing to show, and Panel C falls back
-      // to the crowd alone.
+      // Not fatal. Panel B shows nothing and Panel C falls back to the crowd.
       console.error('could not load cached model artefact', err);
     }
+
+    if (asset && (!cached || asset.ranAt !== cached.ranAt || asset.p !== cached.p)) {
+      this.setModel(asset);
+      return;
+    }
+    this.model = cached ?? asset;
   }
 
   setModel(model) {
     this.model = model;
     this.sql.exec('INSERT OR REPLACE INTO meta (k, v) VALUES (?, ?)', 'model', JSON.stringify(model));
+  }
+
+  /**
+   * The AI decision engine's forecast, on exactly the model's rules: the
+   * deployed data/engine.json is authoritative on boot, and a live re-run from
+   * the board stands until the instance is evicted or the session is reset.
+   */
+  async loadEngine() {
+    let cached = null;
+    const stored = this.sql.exec('SELECT v FROM meta WHERE k = ?', 'engine').toArray();
+    if (stored.length > 0) {
+      try {
+        cached = JSON.parse(stored[0].v);
+      } catch {
+        /* corrupt cache; the asset below replaces it */
+      }
+    }
+
+    let asset = null;
+    try {
+      const res = await this.env.ASSETS.fetch('https://assets.local/data/engine.json');
+      if (res.ok) asset = await res.json();
+    } catch (err) {
+      // Not fatal. The engine is an addition to Panel B, not part of the ensemble.
+      console.error('could not load cached engine artefact', err);
+    }
+
+    const ranAt = (a) => a?.source?.ranAt;
+    if (asset && (!cached || ranAt(asset) !== ranAt(cached) || asset.p !== cached.p)) {
+      this.setEngine(asset);
+      return;
+    }
+    this.engine = cached ?? asset;
+  }
+
+  setEngine(engine) {
+    this.engine = engine;
+    this.sql.exec('INSERT OR REPLACE INTO meta (k, v) VALUES (?, ?)', 'engine', JSON.stringify(engine));
   }
 
   async fetch(request) {
@@ -121,6 +235,10 @@ export class SessionDO extends DurableObject {
     if (path === '/approve') return this.approve(request);
     if (path === '/export') return this.export(request);
     if (path === '/model') return this.storeModel(request);
+    if (path === '/engine') return this.storeEngine(request);
+    if (path === '/counts') return this.json(this.counts());
+    if (path === '/authfail') return this.authFail(request);
+    if (path === '/reset') return this.reset();
 
     return this.json({ error: 'not_found' }, 404);
   }
@@ -129,11 +247,26 @@ export class SessionDO extends DurableObject {
 
   async submit(request) {
     const ip = request.headers.get('cf-connecting-ip') || '';
-    if (ip && this.rateLimited(ip)) {
-      return this.json({ error: 'rate_limited' }, 429);
-    }
-
     const f = await request.json();
+
+    // Only a previously unseen id counts against the ceiling. A resubmit, a
+    // retry, or the separate email write all carry an id we already hold, and
+    // none of them can add a row — so charging them would only penalise the
+    // room for its own bad Wi-Fi.
+    const isNew = this.sql.exec('SELECT 1 FROM forecasts WHERE id = ?', f.id).toArray().length === 0;
+    if (ip && isNew) {
+      if (this.overLimit(ip)) {
+        // Remember that this id was already charged for. A rejected forecast
+        // never reaches the table, so it stays "new" on every retry — and
+        // charging it again would let the room's own retry loop hold the
+        // bucket full, which is the lockout feeding itself. Retries are
+        // re-evaluated but never re-charged, so they land the moment the
+        // window drains.
+        this.charged.add(f.id);
+        return this.json({ error: 'rate_limited' }, 429);
+      }
+      if (!this.charged.delete(f.id)) this.charge(ip);
+    }
 
     // INSERT OR REPLACE keyed on the client-generated uuid: a retry after a
     // dropped connection is a no-op, and going back to change an answer is an
@@ -198,6 +331,12 @@ export class SessionDO extends DurableObject {
     return this.json({ ok: true, model: this.aggregate.model });
   }
 
+  async storeEngine(request) {
+    this.setEngine(await request.json());
+    this.recompute();
+    return this.json({ ok: true, engine: this.aggregate.engine });
+  }
+
   /* --- reads ------------------------------------------------------------ */
 
   recompute() {
@@ -217,7 +356,13 @@ export class SessionDO extends DurableObject {
       .toArray()
       .map((r) => ({ note: r.note, role: r.role, q1: r.q1, ts: r.ts }));
 
-    this.aggregate = buildAggregate(forecasts, this.model, notes);
+    // The engine rides alongside the aggregate rather than inside the ensemble:
+    // shown beside the crowd and the LLM, never blended in.
+    this.aggregate = {
+      ...buildAggregate(forecasts, this.model, notes),
+      engine: engineSummary(this.engine),
+      epoch: this.epoch
+    };
     return this.aggregate;
   }
 
@@ -238,7 +383,8 @@ export class SessionDO extends DurableObject {
       exportedAt: Date.now(),
       forecasts: this.sql.exec('SELECT * FROM forecasts ORDER BY ts ASC').toArray(),
       notes: this.allNotes(),
-      model: this.model
+      model: this.model,
+      engine: this.engine
     };
     if (includeContacts) {
       payload.contacts = this.sql.exec('SELECT * FROM emails ORDER BY ts ASC').toArray();
@@ -246,21 +392,109 @@ export class SessionDO extends DurableObject {
     return this.json(payload);
   }
 
+  /**
+   * What is in the session right now. Read by the moderation view so the reset
+   * confirmation can name exactly what is about to be destroyed rather than
+   * asking for a blind yes.
+   */
+  counts() {
+    const one = (table) => this.sql.exec(`SELECT COUNT(*) AS n FROM ${table}`).toArray()[0].n;
+    return {
+      forecasts: one('forecasts'),
+      notes: one('notes'),
+      contacts: one('emails'),
+      seeded: this.sql.exec('SELECT COUNT(*) AS n FROM forecasts WHERE seeded = 1').toArray()[0].n
+    };
+  }
+
+  /**
+   * Empty the session.
+   *
+   * For clearing rehearsal and test data before the talk, so the room starts at
+   * a real zero. It drops forecasts, reasoning and contacts together: leaving
+   * contacts behind would keep consent records for forecasts that no longer
+   * exist, and the resolution-day job would then email people about a question
+   * whose answers were deleted.
+   *
+   * The model and engine artefacts survive, because they are not session data —
+   * they are the output of the runs you did that morning, and losing them would
+   * mean running both again for no reason.
+   */
+  async reset() {
+    const before = this.counts();
+    this.sql.exec('DELETE FROM forecasts');
+    this.sql.exec('DELETE FROM notes');
+    this.sql.exec('DELETE FROM emails');
+    this.hits.clear();
+    this.charged.clear();
+    this.authFails.clear();
+
+    // Re-read the deployed artefact as well, so a reset genuinely returns the
+    // session to what the deployment says rather than keeping a live re-run
+    // from an earlier rehearsal.
+    this.sql.exec('DELETE FROM meta WHERE k = ?', 'model');
+    this.sql.exec('DELETE FROM meta WHERE k = ?', 'engine');
+    await this.loadModel();
+    await this.loadEngine();
+
+    // New epoch, so phones still holding a forecast from the old session send
+    // themselves back to the question rather than sitting on a submitted screen
+    // for a forecast that no longer exists.
+    this.bumpEpoch();
+
+    this.recompute();
+    return this.json({ ok: true, deleted: before, aggregate: this.aggregate });
+  }
+
   /* --- helpers ---------------------------------------------------------- */
 
-  rateLimited(ip) {
+  /**
+   * Record a failed moderation auth from this address and report whether it is
+   * now locked out. Same sliding-window shape as the forecast ceiling rather
+   * than a second mechanism to reason about.
+   */
+  async authFail(request) {
+    const { ip } = await request.json();
+    if (!ip) return this.json({ locked: false });
+
+    const now = Date.now();
+    const recent = (this.authFails.get(ip) ?? []).filter((t) => now - t < AUTH_FAIL_WINDOW_MS);
+    recent.push(now);
+    this.authFails.set(ip, recent);
+
+    if (this.authFails.size > 5000) {
+      for (const [key, times] of this.authFails) {
+        if (times.every((t) => now - t >= AUTH_FAIL_WINDOW_MS)) this.authFails.delete(key);
+      }
+    }
+    return this.json({ locked: recent.length >= AUTH_FAIL_LIMIT });
+  }
+
+  /** Read-only: is this address already at its ceiling for the window? */
+  overLimit(ip) {
+    const now = Date.now();
+    const recent = (this.hits.get(ip) ?? []).filter((t) => now - t < RATE_WINDOW_MS);
+    this.hits.set(ip, recent);
+    return recent.length >= RATE_LIMIT;
+  }
+
+  /** Record one new forecast against an address. */
+  charge(ip) {
     const now = Date.now();
     const recent = (this.hits.get(ip) ?? []).filter((t) => now - t < RATE_WINDOW_MS);
     recent.push(now);
     this.hits.set(ip, recent);
 
-    // Cheap sweep so a busy session does not grow this map without bound.
+    // Cheap sweeps so a busy session does not grow either structure without
+    // bound. Both are in-memory only and are rebuilt from zero if the Durable
+    // Object restarts, which is fine — the ceiling is a flood guard, not an
+    // accounting record.
     if (this.hits.size > 5000) {
       for (const [key, times] of this.hits) {
         if (times.every((t) => now - t >= RATE_WINDOW_MS)) this.hits.delete(key);
       }
     }
-    return recent.length > RATE_LIMIT;
+    if (this.charged.size > 20000) this.charged.clear();
   }
 
   json(value, status = 200) {

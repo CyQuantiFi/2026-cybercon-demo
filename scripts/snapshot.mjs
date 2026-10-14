@@ -16,6 +16,7 @@ import { readFile, writeFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { buildAggregate } from '../public/js/aggregate.js';
+import { engineSummary } from '../public/js/decision-engine.js';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const OUT = join(root, 'public/data/snapshot.json');
@@ -28,6 +29,7 @@ const flag = (name) => {
 
 const liveBase = flag('--from-live');
 const model = JSON.parse(await readFile(join(root, 'public/data/model.json'), 'utf8'));
+const engine = JSON.parse(await readFile(join(root, 'public/data/engine.json'), 'utf8'));
 
 let forecasts;
 let notes;
@@ -66,7 +68,8 @@ if (liveBase) {
     .map((f) => ({ note: f.note, role: f.role, q1: f.q1, ts: Date.now() }));
 }
 
-const aggregate = buildAggregate(forecasts, model, notes);
+// Same shape the Durable Object serves: the engine beside the aggregate, not in it.
+const aggregate = { ...buildAggregate(forecasts, model, notes), engine: engineSummary(engine) };
 
 await writeFile(
   OUT,
@@ -86,5 +89,6 @@ console.log(`Wrote ${OUT}`);
 console.log(`  n           ${aggregate.n}`);
 console.log(`  crowd       ${(aggregate.crowd.median * 100).toFixed(0)}%  (IQR ${(aggregate.crowd.p25 * 100).toFixed(0)}–${(aggregate.crowd.p75 * 100).toFixed(0)}%)`);
 console.log(`  model       ${aggregate.model ? `${(aggregate.model.p * 100).toFixed(0)}%${aggregate.model.placeholder ? '  [PLACEHOLDER]' : ''}` : 'none'}`);
+console.log(`  engine      ${aggregate.engine ? `${(aggregate.engine.p * 100).toFixed(0)}%${aggregate.engine.placeholder ? '  [PLACEHOLDER]' : ''}` : 'none'}`);
 console.log(`  ensemble    ${(aggregate.ensemble.p * 100).toFixed(0)}%`);
 console.log(`  notes       ${aggregate.notes.length} approved`);

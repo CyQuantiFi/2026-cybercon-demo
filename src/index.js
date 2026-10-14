@@ -8,9 +8,10 @@
        POST /api/f     append (or edit in place) a forecast
        GET  /api/agg   read the aggregate
 
-   Three more exist off the hot path and are not part of that budget: the
+   More exist off the hot path and are not part of that budget: the
    moderation view's routes, which are token-gated and used by one phone in the
-   presenter's pocket, and the optional live model re-run.
+   presenter's pocket, the optional live model re-run, and the AI decision
+   engine's two routes in src/engine.js.
 
    The maths lives in public/js/aggregate.js and is imported by both this Worker
    and the board, so there is exactly one implementation of §7 in the repo.
@@ -18,6 +19,8 @@
 
 import { SessionDO } from './session-do.js';
 import { verifyTurnstile } from './turnstile.js';
+import { secretEquals } from './auth.js';
+import { engineRoute } from './engine.js';
 
 export { SessionDO };
 
@@ -36,6 +39,9 @@ export default {
       if (path === '/api/agg' && request.method === 'GET') return await readAggregate(request, env);
       if (path.startsWith('/api/mod/')) return await moderation(request, env, path);
       if (path === '/api/model/rerun' && request.method === 'POST') return await rerunModel(request, env, ctx);
+      if (path.startsWith('/api/engine/') && request.method === 'POST') {
+        return await engineRoute(request, env, path, sessionStub(env));
+      }
       if (path.startsWith('/api/')) return json({ error: 'not_found' }, 404);
     } catch (err) {
       // Never let a stack trace reach a phone. The board's failure path is to
@@ -200,9 +206,41 @@ async function readAggregate(request, env) {
  * route that can change what 150 people see.
  */
 async function moderation(request, env, path) {
-  const token = request.headers.get('x-mod-token') || new URL(request.url).searchParams.get('t');
-  if (!env.MOD_TOKEN || !token || !timingSafeEqual(token, env.MOD_TOKEN)) {
-    return json({ error: 'unauthorised' }, 401);
+  // Unauthenticated on purpose. "Is moderation set up on this deployment?" is
+  // the first question anyone asks when /mod refuses a token, and answering it
+  // needs to be possible from a phone at a podium with no laptop. It discloses
+  // only whether an operator has set a secret — /mod is already served
+  // publicly, so the existence of moderation was never hidden.
+  if (path === '/api/mod/health' && request.method === 'GET') {
+    return json({ configured: Boolean(env.MOD_TOKEN && env.MOD_TOKEN.trim()) });
+  }
+
+  const supplied = request.headers.get('x-mod-token') || new URL(request.url).searchParams.get('t');
+
+  // Three distinct problems that used to collapse into one 401. They have
+  // three different fixes, and the person hitting them is usually two minutes
+  // from going on stage.
+  if (!env.MOD_TOKEN || !env.MOD_TOKEN.trim()) {
+    return json({ error: 'not_configured' }, 503);
+  }
+  if (!supplied) {
+    return json({ error: 'no_token' }, 401);
+  }
+  if (!(await secretEquals(supplied, env.MOD_TOKEN))) {
+    // Record the miss and lock the address out once it has burned through its
+    // allowance. Without this the moderation routes take unlimited guesses, and
+    // /api/mod/export?include=contacts hands back email addresses.
+    const ip = clientIp(request);
+    if (ip) {
+      const res = await sessionStub(env).fetch('https://session/authfail', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ ip })
+      });
+      const { locked } = await res.json().catch(() => ({ locked: false }));
+      if (locked) return json({ error: 'too_many_attempts' }, 429);
+    }
+    return json({ error: 'bad_token' }, 401);
   }
 
   const stub = sessionStub(env);
@@ -217,6 +255,17 @@ async function moderation(request, env, path) {
         body: await request.text()
       })
     );
+  }
+  if (path === '/api/mod/counts' && request.method === 'GET') {
+    return proxy(await stub.fetch('https://session/counts'));
+  }
+  if (path === '/api/mod/reset' && request.method === 'POST') {
+    const res = await stub.fetch('https://session/reset', { method: 'POST' });
+    // Clear the KV mirror too. It is the fallback the board reads when the
+    // Durable Object is briefly unreachable, so leaving the pre-reset
+    // aggregate there would let a wiped session reappear on screen.
+    if (res.ok) await env.AGG_KV.delete(aggKey(env)).catch(() => {});
+    return proxy(res);
   }
   if (path === '/api/mod/export' && request.method === 'GET') {
     // Forward the query string: ?include=contacts is what asks the Durable
@@ -319,9 +368,3 @@ function proxy(res) {
   return new Response(res.body, { status: res.status, headers: JSON_HEADERS });
 }
 
-function timingSafeEqual(a, b) {
-  if (a.length !== b.length) return false;
-  let diff = 0;
-  for (let i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
-  return diff === 0;
-}

@@ -17,6 +17,8 @@ body { font-size: 17px; line-height: 1.4; }
 h1 { font-size: 26px; font-weight: 700; letter-spacing: var(--track-headline); margin: 0 0 6px; }
 .sub { color: var(--fg-4); font-size: 14px; margin: 0 0 20px; }
 .token { display: flex; gap: 10px; margin-bottom: 22px; }
+.visually-hidden { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+  overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
 .input {
   flex: 1; background: rgba(255,255,255,.04); border: 1px solid var(--hairline-strong);
   border-radius: 10px; color: var(--fg); font-family: var(--font); font-size: 16px; padding: 12px 14px;
@@ -38,6 +40,24 @@ h1 { font-size: 26px; font-weight: 700; letter-spacing: var(--track-headline); m
 .note[data-approved='1'] .note__text::before { content: 'ON BOARD · '; color: var(--pink); font-weight: 700; font-size: 11px; letter-spacing: var(--track-eyebrow); }
 .status { font-size: 13px; color: var(--cyan-deep); min-height: 1.3em; margin: 12px 0 0; }
 .empty { color: var(--fg-4); font-size: 15px; padding-top: 20px; }
+
+/* Danger zone. Deliberately plain until opened, and a long way from Approve. */
+.danger { margin-top: 48px; border-top: 1px solid var(--hairline); padding-top: 16px; }
+.danger summary { cursor: pointer; font-size: 13px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: var(--track-eyebrow); color: var(--muted-3); list-style: none; padding: 8px 0; }
+.danger summary::-webkit-details-marker { display: none; }
+.danger summary::after { content: ' ▸'; }
+.danger[open] summary::after { content: ' ▾'; }
+.danger[open] summary { color: var(--pink); }
+.danger__body { font-size: 14px; color: var(--fg-4); margin: 8px 0 14px; }
+.danger__body--warn { color: var(--fg-2); border-left: 2px solid var(--pink); padding-left: 12px; }
+.danger__label { display: block; font-size: 12px; text-transform: uppercase;
+  letter-spacing: var(--track-eyebrow); color: var(--fg-4); margin-bottom: 8px; }
+.danger__label b { color: var(--pink); }
+.danger .input { margin-bottom: 12px; }
+.btn--danger { width: 100%; background: var(--pink-deep); color: var(--paper); }
+.btn--danger:disabled { background: transparent; border-color: var(--hairline);
+  color: var(--muted); cursor: not-allowed; }
 </style>
 </head>
 <body>
@@ -46,50 +66,123 @@ h1 { font-size: 26px; font-weight: 700; letter-spacing: var(--track-headline); m
   <h1>Nothing reaches the board unapproved</h1>
   <p class="sub">Approve a line and it joins the rotation on Panel A within two seconds. Tap again to pull it back off.</p>
 
-  <div class="token">
-    <input class="input" type="password" id="token" placeholder="Moderation token" autocomplete="off">
-    <button class="btn btn--primary" id="load">Load</button>
-  </div>
+  <!-- A real form with a username field, so a password manager will both fill
+       and save this. It was type=password already; autocomplete="off" was the
+       thing telling managers to stay away. The username is fixed and hidden —
+       managers generally need one to associate a saved credential, and a
+       password-only field gets offered for fill but not for save. -->
+  <form class="token" id="tokenForm">
+    <input class="visually-hidden" type="text" name="username" value="cybercon-moderator"
+           autocomplete="username" readonly tabindex="-1" aria-hidden="true">
+    <input class="input" type="password" id="token" name="mod-token"
+           placeholder="Moderation token" autocomplete="current-password"
+           enterkeyhint="go" aria-label="Moderation token">
+    <button class="btn btn--primary" id="load" type="submit">Load</button>
+  </form>
 
   <div class="counts"><span>Pending <b id="pending">0</b></span><span>On board <b id="approved">0</b></span></div>
   <div id="list"></div>
   <p class="status" id="status"></p>
+
+  <!-- Collapsed, at the bottom, behind a typed confirmation. This wipes a live
+       session and there is no undo, so it should take deliberate effort to
+       reach and should never be adjacent to the Approve buttons. -->
+  <details class="danger" id="danger">
+    <summary>Reset the session</summary>
+    <p class="danger__body">
+      Clears every forecast, every line of reasoning and every email address, so
+      the room starts at a real zero. For wiping rehearsal and test data before
+      the talk. The model artefact is kept.
+    </p>
+    <p class="danger__body danger__body--warn" id="resetWhat">Checking what is in the session…</p>
+    <label class="danger__label" for="resetConfirm">Type <b>RESET</b> to confirm</label>
+    <input class="input" type="text" id="resetConfirm" autocomplete="off" autocapitalize="characters" placeholder="RESET">
+    <button class="btn btn--danger" id="resetGo" disabled>Delete everything</button>
+  </details>
 </div>
 
 <script type="module">
 const $ = (id) => document.getElementById(id);
 const KEY = 'cyq.modtoken';
-let token = sessionStorage.getItem(KEY) || new URLSearchParams(location.search).get('t') || '';
+// Trimmed here as well as in the Load handler. A bookmarked /mod?t=… with a
+// trailing space used to fail while typing the same token by hand succeeded.
+let token = (sessionStorage.getItem(KEY) || new URLSearchParams(location.search).get('t') || '').trim();
 $('token').value = token;
 
-$('load').addEventListener('click', () => {
+let listKey = null;
+
+$('tokenForm').addEventListener('submit', (e) => {
+  e.preventDefault();
   token = $('token').value.trim();
   sessionStorage.setItem(KEY, token);
   load();
 });
 
+/** The server names which of the three things went wrong; say so plainly. */
+const MESSAGES = {
+  not_configured: 'Moderation is not set up on this deployment. Run `wrangler secret put MOD_TOKEN`, then redeploy.',
+  bad_token: 'Token rejected — check for a stray space, and that it matches the secret you set.',
+  no_token: 'Enter the token first.',
+  too_many_attempts: 'Too many failed attempts from this network. Wait a few minutes and try again.'
+};
+
+async function describeFailure(res) {
+  try {
+    const { error } = await res.json();
+    return MESSAGES[error] ?? `Refused (${res.status}).`;
+  } catch {
+    return `Refused (${res.status}).`;
+  }
+}
+
+/**
+ * Ask before anything is typed, so a deployment with no secret announces
+ * itself instead of looking like a wrong password.
+ */
+async function checkConfigured() {
+  try {
+    const res = await fetch('/api/mod/health');
+    const { configured } = await res.json();
+    if (!configured) status(MESSAGES.not_configured);
+    return configured;
+  } catch {
+    return true; // Not reachable is a different problem; let load() report it.
+  }
+}
+
 async function load() {
-  if (!token) return status('Enter the token first.');
+  if (!token) return status(MESSAGES.no_token);
   try {
     const res = await fetch('/api/mod/notes', { headers: { 'x-mod-token': token } });
-    if (res.status === 401) return status('Token rejected.');
+    if (!res.ok) return status(await describeFailure(res));
     render((await res.json()).notes ?? []);
-    status('');
+    clearTransientStatus();
   } catch {
     status('Could not reach the server.');
   }
 }
 
-async function setApproved(id, approved) {
+async function setApproved(id, approved, btn) {
+  // Held down for the round trip. On venue Wi-Fi a slow response invites a
+  // second tap, which would toggle the line straight back off again.
+  const label = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = approved ? 'Approving…' : 'Removing…';
   try {
     const res = await fetch('/api/mod/approve', {
       method: 'POST',
       headers: { 'content-type': 'application/json', 'x-mod-token': token },
       body: JSON.stringify({ id, approved })
     });
-    if (!res.ok) return status('Rejected.');
+    if (!res.ok) {
+      btn.disabled = false;
+      btn.textContent = label;
+      return status(await describeFailure(res));
+    }
     render((await res.json()).notes ?? []);
   } catch {
+    btn.disabled = false;
+    btn.textContent = label;
     status('Could not reach the server.');
   }
 }
@@ -99,12 +192,21 @@ function render(notes) {
   $('approved').textContent = String(notes.filter((n) => n.approved).length);
 
   if (!notes.length) {
-    $('list').innerHTML = '<p class="empty">No reasoning submitted yet.</p>';
+    if (listKey !== 'empty') $('list').innerHTML = '<p class="empty">No reasoning submitted yet.</p>';
+    listKey = 'empty';
     return;
   }
 
   // Pending first — that is the queue that needs a thumb on it.
   const sorted = [...notes].sort((a, b) => a.approved - b.approved || b.ts - a.ts);
+
+  // Rebuild only when the queue actually changed. The 4-second poll used to
+  // replace every row unconditionally, so a tap landing mid-rebuild hit a node
+  // that was being thrown away and the approve was silently lost.
+  const key = sorted.map((n) => `${n.id}:${n.approved ? 1 : 0}`).join(',');
+  if (key === listKey) return;
+  listKey = key;
+
   $('list').replaceChildren(...sorted.map(row));
 }
 
@@ -126,16 +228,84 @@ function row(n) {
   const btn = document.createElement('button');
   btn.className = n.approved ? 'btn btn--ghost' : 'btn btn--primary';
   btn.textContent = n.approved ? 'Take off the board' : 'Approve';
-  btn.addEventListener('click', () => setApproved(n.id, !n.approved));
+  btn.addEventListener('click', () => setApproved(n.id, !n.approved, btn));
   actions.append(btn);
 
   wrap.append(text, meta, actions);
   return wrap;
 }
 
-function status(text) { $('status').textContent = text; }
+/**
+ * Sticky messages survive the 4-second poll. A confirmation that a session was
+ * irreversibly wiped should stay on screen until the operator does something
+ * else, not vanish two seconds later because a routine refresh succeeded.
+ */
+function status(text, sticky = false) {
+  const el = $('status');
+  el.textContent = text;
+  el.dataset.sticky = sticky ? '1' : '';
+}
 
-if (token) load();
+function clearTransientStatus() {
+  const el = $('status');
+  if (el.dataset.sticky !== '1') el.textContent = '';
+}
+
+/* --- reset ---------------------------------------------------------------- */
+
+/** Name the exact damage before asking, rather than asking for a blind yes. */
+async function describeSession() {
+  try {
+    const res = await fetch('/api/mod/counts', { headers: { 'x-mod-token': token } });
+    if (!res.ok) return $('resetWhat').textContent = await describeFailure(res);
+    const c = await res.json();
+    $('resetWhat').textContent =
+      `This will delete ${c.forecasts} forecast${c.forecasts === 1 ? '' : 's'}` +
+      `${c.seeded ? ` (${c.seeded} of them pre-seeded)` : ''}, ` +
+      `${c.notes} line${c.notes === 1 ? '' : 's'} of reasoning, and ` +
+      `${c.contacts} email address${c.contacts === 1 ? '' : 'es'}. There is no undo.`;
+  } catch {
+    $('resetWhat').textContent = 'Could not reach the server.';
+  }
+}
+
+$('danger').addEventListener('toggle', () => {
+  if ($('danger').open) describeSession();
+});
+
+$('resetConfirm').addEventListener('input', () => {
+  $('resetGo').disabled = $('resetConfirm').value.trim().toUpperCase() !== 'RESET';
+});
+
+$('resetGo').addEventListener('click', async () => {
+  const btn = $('resetGo');
+  btn.disabled = true;
+  btn.textContent = 'Deleting…';
+  try {
+    const res = await fetch('/api/mod/reset', { method: 'POST', headers: { 'x-mod-token': token } });
+    if (!res.ok) {
+      btn.textContent = 'Delete everything';
+      return status(await describeFailure(res));
+    }
+    const { deleted } = await res.json();
+    $('resetConfirm').value = '';
+    btn.textContent = 'Delete everything';
+    $('danger').open = false;
+    listKey = null;
+    // Refresh first, then report. load() clears the status line on success, and
+    // the confirmation of a destructive action is the one message that must not
+    // be wiped a millisecond after it appears.
+    await load();
+    status(`Session cleared — removed ${deleted.forecasts} forecasts, ${deleted.notes} notes, ${deleted.contacts} contacts.`, true);
+  } catch {
+    btn.textContent = 'Delete everything';
+    status('Could not reach the server.');
+  }
+});
+
+// Report an unconfigured deployment straight away, then load if we have a token.
+const configured = await checkConfigured();
+if (configured && token) load();
 setInterval(() => { if (token) load(); }, 4000);
 </script>
 </body>

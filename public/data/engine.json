@@ -1,0 +1,25 @@
+{
+  "_comment": "PLACEHOLDER. Overwritten by `npm run engine` on the morning of the talk, once public/data/evidence.json passes its gate. It exists so the board renders the AI decision engine on Panel B before the real call has been made, and it is flagged so it cannot be mistaken for a real forecast on stage.",
+  "placeholder": true,
+  "p": 0.5,
+  "parts": {
+    "a": null,
+    "bGivenA": null,
+    "product": null
+  },
+  "consistency": null,
+  "attribution": [],
+  "crossCheck": null,
+  "evidence": null,
+  "source": {
+    "kind": "ai-decision-engine",
+    "label": "AI decision engine",
+    "engine": "clef",
+    "engineLabel": "Clef",
+    "vendor": "Cloudflare",
+    "model": "@cf/cloudflare/clef",
+    "evidenceSha": null,
+    "ranAt": 0,
+    "live": false
+  }
+}

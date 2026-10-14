@@ -3,7 +3,9 @@
 The seven-minute demo for the CyQuantiFi "Experts as a Service" session. The
 audience scans a QR code, forecasts one real dated question, and a presenter
 board resolves the room, an LLM participant and the FAIR chain into a dollar
-range while they watch.
+range while they watch. An AI decision engine — Cloudflare's Clef or TypeSafe's
+Jev — forecasts beside them, then says what to do about that dollar range and
+how sure it is.
 
 It is a demonstration instrument, not the product. It has no accounts, no
 track-record weighting, no tenancy, and it is not meant to grow any.
@@ -31,10 +33,10 @@ Then open:
 | `/` or `/f` | participant app — the QR target |
 | `/board` | presenter board, authored at 1920×1080 and scaled to fit |
 | `/board?offline=1` | the same board running entirely off the bundled snapshot |
-| `/mod` | moderation view — paste the token, one tap to approve |
+| `/mod` | moderation view — paste the token, one tap to approve, reset at the bottom |
 | `/privacy` | privacy policy |
 
-`npm test` runs 43 unit tests over the aggregation and the Monte Carlo.
+`npm test` runs 83 unit tests over the aggregation, the Monte Carlo, the moderation token comparison, the phone's session-reset rule and the decision-engine harness.
 
 ## Architecture
 
@@ -42,10 +44,13 @@ One Cloudflare Worker with static assets. Assets are matched first; anything
 that is not a file on disk falls through to `src/index.js`.
 
 ```
-POST /api/f      append or edit a forecast          ← the two routes 150 phones hit
-GET  /api/agg    read the aggregate (ETag, 2s poll)
-POST /api/mod/*  moderation, token-gated            ← one phone, off the hot path
-POST /api/model/rerun   optional live model call
+POST /api/f            append or edit a forecast     ← the two routes 150 phones hit
+GET  /api/agg          read the aggregate (ETag, 2s poll)
+GET  /api/mod/health   is MOD_TOKEN set? no token needed
+GET/POST /api/mod/*    moderation, token-gated       ← one phone, off the hot path
+POST /api/model/rerun  optional live model call
+POST /api/engine/rerun   optional live decision-engine forecast   ← src/engine.js
+POST /api/engine/decide  the decision engine's call on Panel D's dollar range
 ```
 
 **Storage** is a Durable Object (`src/session-do.js`) with SQLite, not KV: the
@@ -70,14 +75,77 @@ Arial.
   permit defining a Durable Object inside a Pages project, so §5 as written
   needs two deploys and a cross-script binding. This is one deploy with the same
   static files, the same two routes and the same DO.
-- **Per-IP rate limit is 240/minute, not tight.** Venue Wi-Fi NATs the entire
-  room behind a handful of addresses. A tight per-IP cap does not stop a ballot
-  stuffer; it locks out the audience, at exactly the moment the board is on
-  screen. The real controls are one-forecast-per-client-id with edit-in-place,
-  and Turnstile. See the comment in `src/session-do.js`.
+- **The rate limit counts distinct client ids, not requests.** Venue Wi-Fi NATs
+  the whole room behind a handful of addresses, so every phone shares one
+  counter. Counting requests would put ~150 forecasts, the second write from
+  anyone who leaves an email, and every retry through bad Wi-Fi into the same
+  bucket — comfortably over a few hundred in the minute after "scan now", and
+  the 429s would be silent while the board's counter stalled. Since every write
+  is `INSERT OR REPLACE` on a client uuid, only a previously unseen id can add a
+  row, so only that is charged: retries, edits and the email step are free, and
+  the 600/minute ceiling protects the one thing it should, a script inventing
+  fresh uuids. A rejected id is remembered so its retries are re-evaluated but
+  never re-charged — otherwise the room's own retry loop would hold the bucket
+  full and extend its own lockout. See `src/session-do.js`.
 - **The moderation and model-rerun routes exist** beyond §5's "two routes,
   nothing else". That budget is about the hot path; these are used by one phone
   in your pocket and one keypress.
+
+## The AI decision engine — Clef and Jev
+
+A decision model is not an LLM. It takes a *state* and typed questions and
+returns a probability for every allowed answer — no prose, nothing to parse.
+Clef (Cloudflare, on Workers AI) and Jev (TypeSafe) share one request shape, so
+`public/js/decision-engine.js` drives both and the engine is a config choice
+(`ENGINE=clef | clef-flash | jev`).
+
+It does two jobs on the board:
+
+- **Panel B, a second machine forecaster.** Asked the room's question as three
+  yes/no questions — part A (the incident), part B given A (the public
+  attribution) and the whole — so the board can show which part carries the
+  uncertainty, and flag it if the whole disagrees with its parts by more than
+  `CONSISTENCY_TOLERANCE`. It gives no reasons, so in their place the board
+  shows the two evidence items that moved it most when withheld. It sits on
+  Panel C's band as a hollow tick and is **not** blended into the ensemble.
+- **Panel E, the decision.** Revealed after the money. The Worker re-runs the
+  board's own Monte Carlo (same seed, same numbers to the dollar), works out
+  each treatment's expected loss avoided, return on spend and residual 90th
+  percentile against the risk appetite, and asks the engine to choose. Its
+  confidence picks a band, printed on screen: **act** at ≥ 0.80, **review** at
+  ≥ 0.50, and below that **expert required** — the call goes to a person. No
+  stated confidence also goes to a person.
+
+**Evidence is the gate.** The engine can't look anything up, so
+`public/data/evidence.json` is the whole of what it knows: cited, dated claims,
+each tagged to part A or B and pointing for or against. `checkEvidence()`
+refuses to call any engine unless each part has ≥ 2 items with https sources, no
+older than 24 months, and at least one each way. `public/data/treatments.json`
+faces the same rule for costs, effects and the risk appetite. **Both ship as
+placeholders that say what to find** — nothing in them is a real figure — and the
+board flags the engine in pink until they are replaced.
+
+**Tagged everywhere.** Every engine output carries
+`source.kind = "ai-decision-engine"`; the routes add an `x-cyq-source:
+ai-decision-engine` header; the board labels it "AI decision engine" on Panels
+B and E; the export carries it; and `score.mjs` scores it as its own forecaster
+on resolution day.
+
+```bash
+npm run engine -- --check                 # gates: is the evidence enough? is the artefact fresh?
+npm run engine -- --dry                   # print the exact request, call nothing
+npm run engine -- --probe                 # one call, print the raw answers
+npm run engine                            # forecast + attribution → public/data/engine.json
+npm run engine -- --cross jev             # …and ask Jev too, shown as a gap on Panel B
+npm run engine -- --decide-from-snapshot  # Panel E's offline fallback → engine-decision.json
+```
+
+The forecast makes 1 + N calls for N evidence items (the attribution), so it is
+made the morning of, not live; a live `E` re-run keeps that attribution only if
+the evidence has not changed since. The request shape follows Cloudflare's
+published Clef example; the answer readers accept a couple of alternative field
+names because the API is weeks old, and `--probe` is how to confirm them before
+the talk.
 
 ## Secrets
 
@@ -87,7 +155,15 @@ None are required to run locally. Set them for the deploy:
 npx wrangler secret put ANTHROPIC_API_KEY   # the LLM participant, server side only
 npx wrangler secret put MOD_TOKEN           # unlocks the moderation view
 npx wrangler secret put TURNSTILE_SECRET    # optional; unset = no challenge
+npx wrangler secret put CF_ACCOUNT_ID       # Clef, via the Workers AI REST API
+npx wrangler secret put CF_AI_TOKEN         #   an API token with Workers AI read
+npx wrangler secret put TYPESAFE_API_KEY    # Jev, only if ENGINE=jev
 ```
+
+Clef is called over REST rather than through an `env.AI` binding on purpose: a
+binding makes `wrangler dev` refuse to start without Cloudflare credentials,
+which would break local dev for everyone to add one optional panel. The scripts
+read the same names from the environment.
 
 For local dev, put them in `.dev.vars` (gitignored):
 
@@ -101,9 +177,12 @@ Turnstile also needs its public half in `wrangler.jsonc` under
 ## Deploy
 
 ```bash
-npx wrangler kv namespace create AGG_KV     # paste the id into wrangler.jsonc
 npm run deploy
 ```
+
+The KV namespace already exists (`cybercon-2026-demo-AGG_KV`,
+`8d32bd288aa54ee29866461d9b17b56a`) and its id is in `wrangler.jsonc`. The
+Durable Object and its migration are created by the first deploy.
 
 Point a custom domain at it and make the QR target a short path — `/f` is
 already wired and answers without a redirect.
@@ -112,8 +191,24 @@ already wired and answers without a redirect.
 
 **A week out**
 
-1. Check both questions. If Q1 has already resolved, set `activeFrequency` to
-   `"q1b"` in `public/data/questions.json`. Nothing else changes.
+1. Check the active question. If it has already resolved, or the dry run shows
+   the room converging, switch `activeFrequency` in `public/data/questions.json`
+   to `q1b` (fourth party) or `q1` (edge device).
+
+   **Changing the question is three files, not one.** The question set, the
+   model prompt and the seed data all name the same subject, and two of them
+   fail silently if left behind:
+   - `public/data/questions.json` — `activeFrequency`
+   - `public/data/model-prompt.txt` — otherwise Panel B forecasts a *different
+     question* to the room and the board presents them side by side as
+     comparable. `node scripts/model-participant.mjs --check` catches this.
+   - `scripts/seed-forecasts.json` — otherwise the board opens pre-seeded with
+     opinions about something else. `npm run seed` now refuses outright when
+     `answersQuestion` does not match `activeFrequency`.
+   - `public/data/evidence.json` and `public/data/treatments.json` — the
+     decision engine's evidence and options. The engine routes and
+     `npm run engine` refuse an evidence pack whose `question` is not the
+     active one; the treatments' descriptions name the subject, so reread them.
 2. Dry run with 20+ real people. Keep that data:
    `node scripts/snapshot.mjs --from-live https://your.domain --token $MOD_TOKEN`
    — it becomes both the seed and the offline snapshot.
@@ -128,12 +223,19 @@ already wired and answers without a redirect.
    and that the prompt has not changed since it was made.
    **The artefact in the repo is a placeholder and the board says so in pink on
    Panel B until you replace it.**
-5. `npm run seed -- https://your.domain` so the histogram is never empty.
-6. Open `/board` in the same browser as the deck. Open `/mod` on your phone.
+   `npm run engine -- --check` until the evidence and treatments pass, then
+   `npm run engine` and `npm run engine -- --decide-from-snapshot` — the same
+   placeholder rule applies on Panels B and E.
+5. `npm run check -- https://your.domain --token $MOD_TOKEN` — verifies the
+   served bytes still match the repo, the aggregate leaks nothing, the snapshot
+   is populated, and your moderation token actually works. Run it *before* you
+   need any of that to be true on stage.
+6. `npm run seed -- https://your.domain` so the histogram is never empty.
+7. Open `/board` in the same browser as the deck. Open `/mod` on your phone.
 
 **Rehearse the failure path, not just the happy one**
 
-7. Open `/board?offline=1` and run the whole narration with the network off.
+8. Open `/board?offline=1` and run the whole narration with the network off.
    That is the path §9 says to rehearse, and it is the one you will be glad of.
 
 **On stage**
@@ -141,8 +243,10 @@ already wired and answers without a redirect.
 | Key | |
 |---|---|
 | `→` / `space` | reveal the next panel |
-| `1`–`4` | jump to a panel, `0` hides all |
+| `1`–`5` | jump to a panel, `0` hides all — `5` is the decision, asked for live as it rises |
 | `R` | re-run the model live — optional theatre, 6s timeout, silent fallback |
+| `E` | re-run the decision engine's forecast live — same rules |
+| `D` | re-ask the decision on the numbers on screen now |
 | `S` | force the snapshot |
 
 **Resolution day**
@@ -164,6 +268,76 @@ account's daily recipient cap first (2,000/day on Workspace, 500/day consumer).
 
 This step is what turns a demo into a track record; it is the only part of this
 repo that matters in a year.
+
+## Resetting the session
+
+`/mod` has a **Reset the session** panel at the bottom, collapsed and behind a
+typed confirmation. It drops every forecast, every line of reasoning and every
+email address, so the room starts at a real zero — for clearing rehearsal and
+test data before the talk. The confirmation names the exact counts first, and
+there is no undo. The model artefact survives, so you do not have to re-run it.
+
+It also clears the KV mirror, which is the fallback the board reads when the
+Durable Object is briefly unreachable — otherwise a wiped session could
+reappear on screen.
+
+**Phones notice too.** A reset empties the server, but every participant's
+forecast also lives in their own `localStorage`, so without help a phone goes on
+showing the submitted screen — and its position against a crowd — for a forecast
+the server has never heard of. The aggregate carries a session `epoch` that
+changes on every reset; a phone holding a forecast from an older epoch clears its
+local state, returns to the question and says why. You will hit this first while
+rehearsing on your own phone.
+
+## Choosing a question
+
+The demo needs the room to **disagree**. §2: *"If the crowd converges instantly,
+the demo has nothing to show — spread is the point."* Panel A is a histogram of
+exactly that, and a question the room already agrees on produces a bar banked
+against one edge and a dead half-screen.
+
+The original edge-device question failed this: the panel round came back median
+80%, IQR 68–88%, with only 2 of 20 below 50%. The active question is now the
+AI-agent one, which has no base rate for anyone to pattern-match against.
+
+**Judge a candidate by its histogram, not by how interesting it sounds.** After
+the dry run, if the IQR is narrower than about 20 points, or either outer third
+of the histogram is empty, use the backup instead.
+
+The AI-agent question carries one load-bearing exclusion: an *attacker* using AI
+against the organisation does not count — deepfakes, cloned voices and
+AI-written phishing are all out of scope. Only the organisation's **own** AI
+being compromised, manipulated or misused qualifies. Without that line the
+question resolves YES immediately and the spread collapses. It is in the
+ambiguity rule, in the model prompt, and it is worth saying out loud on stage.
+
+## When /mod says the token is wrong
+
+Ask the deployment which of the three things it is — the endpoint distinguishes
+them, and needs no token to answer:
+
+```bash
+curl https://your.domain/api/mod/health      # {"configured":true|false}
+```
+
+| What you see | What it means |
+|---|---|
+| `{"configured":false}`, or `503 not_configured` | The secret was never set on this deployment. `npx wrangler secret put MOD_TOKEN`, then redeploy. |
+| `401 bad_token` | The token does not match the stored secret. |
+| `401 no_token` | Nothing was supplied. |
+| `429 too_many_attempts` | Ten failed attempts from that address in five minutes. A correct token still works — the lockout counts failures only, so nobody can spray the endpoint to knock you off your own board. |
+
+Leading and trailing whitespace is trimmed on both sides, so a secret that
+picked up a stray newline from the `wrangler secret put` prompt — which is easy
+to do by pasting or piping, and was the original cause of this — no longer
+breaks anything. If it still refuses, the stored value genuinely differs: set it
+again, typing rather than pasting.
+
+The token is typed on a phone in a dark room, so the field is a proper
+credential form: `type=password` with `autocomplete="current-password"` and a
+hidden username, which lets a password manager both fill and save it. Prefer a
+few words plus a short suffix over random hex — easier to type, and no `0`/`O`
+or `1`/`l`/`I` to squint at.
 
 ## Privacy
 
@@ -192,6 +366,11 @@ notice and the policy: Cloudflare, which runs the app, and **Gmail (Google LLC)*
 which sends the outcome notice. Both sit outside Australia. If the mail provider
 ever changes, both places need updating and the notice version needs bumping.
 
+The AI decision engine adds no processor that receives personal information.
+Clef runs on Cloudflare, already named. Jev (TypeSafe) is sent only the
+question, the public evidence pack and aggregate numbers — never a forecast,
+a note, an id or an address — so using it needs no change to the notice.
+
 **Unsubscribe** is by reply rather than by one-click link, because these notices
 come from a mailbox rather than a bulk mailing platform. The policy says so
 plainly rather than promising a mechanism that does not exist.
@@ -206,19 +385,26 @@ wrangler.jsonc              assets, Durable Object, KV, vars
 src/index.js                router; everything else falls through to assets
 src/session-do.js           forecasts / emails / notes, rate limit, aggregate cache
 src/turnstile.js            fails open on a network error, on purpose
+src/engine.js               the decision engine's two live routes
 public/index.html           participant app, six screens
-public/board.html           presenter board, four panels
+public/board.html           presenter board, four panels and the decision
 public/mod.html             moderation view
 public/privacy.html         the light document surface
 public/css/tokens.css       design tokens, extracted from the deck
 public/js/aggregate.js      §7 — shared with the Worker
 public/js/montecarlo.js     §8 — FAIR chain, 10,000 iterations
+public/js/decision-engine.js  Clef/Jev adapter, evidence gate, bands, tagging
+public/js/session-epoch.js  when a phone's saved forecast belongs to a reset session
 public/data/questions.json  Q1, Q2, the backup question, resolution criteria
 public/data/model-prompt.txt  the prompt, in the repo for audit
 public/data/model.json      cached model artefact (placeholder until you run it)
+public/data/evidence.json   the engine's cited evidence (placeholder until sourced)
+public/data/treatments.json the decision's options, costs and appetite (placeholder)
+public/data/engine.json     cached engine forecast (placeholder until you run it)
+public/data/engine-decision.json  Panel E's offline fallback (placeholder)
 public/data/snapshot.json   the offline board
-scripts/                    model, seed, snapshot, qr, score
-test/                       43 tests over the maths
+scripts/                    model, engine, seed, snapshot, qr, score, check
+test/                       83 tests
 ```
 
 ## Design
