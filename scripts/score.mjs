@@ -86,12 +86,16 @@ const scored = forecasts
 /* Benchmarks. A score is only meaningful next to what it beat. */
 const crowd = aggregateCrowd(forecasts.map((f) => f.q1));
 const modelP = dump.model && !dump.model.placeholder ? clampP(dump.model.p) : null;
+// The AI decision engine is scored as its own forecaster, so it builds a track
+// record the same way the room does — the one thing the demo cannot fake.
+const engineP = dump.engine && !dump.engine.placeholder && Number.isFinite(dump.engine.p) ? clampP(dump.engine.p) : null;
 
 const benchmarks = {
   'always 50%': brier(0.5),
   'crowd median (extremised)': brier(crowd.median),
   'crowd median (raw)': brier(crowd.rawMedian),
   ...(modelP !== null ? { 'model alone': brier(modelP) } : {}),
+  ...(engineP !== null ? { 'AI decision engine alone': brier(engineP) } : {}),
   'best individual': scored[0].brier,
   'mean individual': mean(scored.map((s) => s.brier))
 };
@@ -136,7 +140,7 @@ await writeFile(join(outDir, 'scores.csv'), `${csv}\n`);
 
 await writeFile(
   join(outDir, 'summary.json'),
-  `${JSON.stringify({ outcome: outcomeRaw, n: forecasts.length, benchmarks, byRole, byConfidence, crowd, modelP }, null, 2)}\n`
+  `${JSON.stringify({ outcome: outcomeRaw, n: forecasts.length, benchmarks, byRole, byConfidence, crowd, modelP, engineP }, null, 2)}\n`
 );
 
 /* --- the outcome notice -------------------------------------------------------
@@ -170,7 +174,7 @@ It resolved ${outcomeRaw.toUpperCase()}.
   The room's aggregate      ${(crowd.median * 100).toFixed(0)}%   (Brier ${p4(benchmarks['crowd median (extremised)'])})
   Always saying 50%                Brier ${p4(benchmarks['always 50%'])}
   The best single forecaster       Brier ${p4(benchmarks['best individual'])}
-${modelP !== null ? `  The model participant     ${(modelP * 100).toFixed(0)}%   (Brier ${p4(benchmarks['model alone'])})\n` : ''}
+${modelP !== null ? `  The model participant     ${(modelP * 100).toFixed(0)}%   (Brier ${p4(benchmarks['model alone'])})\n` : ''}${engineP !== null ? `  The AI decision engine    ${(engineP * 100).toFixed(0)}%   (Brier ${p4(benchmarks['AI decision engine alone'])})\n` : ''}
 That is the whole point of the exercise: the estimate is now checkable, and the
 next one starts from evidence instead of assertion.
 

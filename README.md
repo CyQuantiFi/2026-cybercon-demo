@@ -3,7 +3,9 @@
 The seven-minute demo for the CyQuantiFi "Experts as a Service" session. The
 audience scans a QR code, forecasts one real dated question, and a presenter
 board resolves the room, an LLM participant and the FAIR chain into a dollar
-range while they watch.
+range while they watch. An AI decision engine — Cloudflare's Clef or TypeSafe's
+Jev — forecasts beside them, then says what to do about that dollar range and
+how sure it is.
 
 It is a demonstration instrument, not the product. It has no accounts, no
 track-record weighting, no tenancy, and it is not meant to grow any.
@@ -34,7 +36,7 @@ Then open:
 | `/mod` | moderation view — paste the token, one tap to approve, reset at the bottom |
 | `/privacy` | privacy policy |
 
-`npm test` runs 51 unit tests over the aggregation, the Monte Carlo and the moderation token comparison.
+`npm test` runs 83 unit tests over the aggregation, the Monte Carlo, the moderation token comparison, the phone's session-reset rule and the decision-engine harness.
 
 ## Architecture
 
@@ -47,6 +49,8 @@ GET  /api/agg          read the aggregate (ETag, 2s poll)
 GET  /api/mod/health   is MOD_TOKEN set? no token needed
 GET/POST /api/mod/*    moderation, token-gated       ← one phone, off the hot path
 POST /api/model/rerun  optional live model call
+POST /api/engine/rerun   optional live decision-engine forecast   ← src/engine.js
+POST /api/engine/decide  the decision engine's call on Panel D's dollar range
 ```
 
 **Storage** is a Durable Object (`src/session-do.js`) with SQLite, not KV: the
@@ -87,6 +91,62 @@ Arial.
   nothing else". That budget is about the hot path; these are used by one phone
   in your pocket and one keypress.
 
+## The AI decision engine — Clef and Jev
+
+A decision model is not an LLM. It takes a *state* and typed questions and
+returns a probability for every allowed answer — no prose, nothing to parse.
+Clef (Cloudflare, on Workers AI) and Jev (TypeSafe) share one request shape, so
+`public/js/decision-engine.js` drives both and the engine is a config choice
+(`ENGINE=clef | clef-flash | jev`).
+
+It does two jobs on the board:
+
+- **Panel B, a second machine forecaster.** Asked the room's question as three
+  yes/no questions — part A (the incident), part B given A (the public
+  attribution) and the whole — so the board can show which part carries the
+  uncertainty, and flag it if the whole disagrees with its parts by more than
+  `CONSISTENCY_TOLERANCE`. It gives no reasons, so in their place the board
+  shows the two evidence items that moved it most when withheld. It sits on
+  Panel C's band as a hollow tick and is **not** blended into the ensemble.
+- **Panel E, the decision.** Revealed after the money. The Worker re-runs the
+  board's own Monte Carlo (same seed, same numbers to the dollar), works out
+  each treatment's expected loss avoided, return on spend and residual 90th
+  percentile against the risk appetite, and asks the engine to choose. Its
+  confidence picks a band, printed on screen: **act** at ≥ 0.80, **review** at
+  ≥ 0.50, and below that **expert required** — the call goes to a person. No
+  stated confidence also goes to a person.
+
+**Evidence is the gate.** The engine can't look anything up, so
+`public/data/evidence.json` is the whole of what it knows: cited, dated claims,
+each tagged to part A or B and pointing for or against. `checkEvidence()`
+refuses to call any engine unless each part has ≥ 2 items with https sources, no
+older than 24 months, and at least one each way. `public/data/treatments.json`
+faces the same rule for costs, effects and the risk appetite. **Both ship as
+placeholders that say what to find** — nothing in them is a real figure — and the
+board flags the engine in pink until they are replaced.
+
+**Tagged everywhere.** Every engine output carries
+`source.kind = "ai-decision-engine"`; the routes add an `x-cyq-source:
+ai-decision-engine` header; the board labels it "AI decision engine" on Panels
+B and E; the export carries it; and `score.mjs` scores it as its own forecaster
+on resolution day.
+
+```bash
+npm run engine -- --check                 # gates: is the evidence enough? is the artefact fresh?
+npm run engine -- --dry                   # print the exact request, call nothing
+npm run engine -- --probe                 # one call, print the raw answers
+npm run engine                            # forecast + attribution → public/data/engine.json
+npm run engine -- --cross jev             # …and ask Jev too, shown as a gap on Panel B
+npm run engine -- --decide-from-snapshot  # Panel E's offline fallback → engine-decision.json
+```
+
+The forecast makes 1 + N calls for N evidence items (the attribution), so it is
+made the morning of, not live; a live `E` re-run keeps that attribution only if
+the evidence has not changed since. The request shape follows Cloudflare's
+published Clef example; the answer readers accept a couple of alternative field
+names because the API is weeks old, and `--probe` is how to confirm them before
+the talk.
+
 ## Secrets
 
 None are required to run locally. Set them for the deploy:
@@ -95,7 +155,15 @@ None are required to run locally. Set them for the deploy:
 npx wrangler secret put ANTHROPIC_API_KEY   # the LLM participant, server side only
 npx wrangler secret put MOD_TOKEN           # unlocks the moderation view
 npx wrangler secret put TURNSTILE_SECRET    # optional; unset = no challenge
+npx wrangler secret put CF_ACCOUNT_ID       # Clef, via the Workers AI REST API
+npx wrangler secret put CF_AI_TOKEN         #   an API token with Workers AI read
+npx wrangler secret put TYPESAFE_API_KEY    # Jev, only if ENGINE=jev
 ```
+
+Clef is called over REST rather than through an `env.AI` binding on purpose: a
+binding makes `wrangler dev` refuse to start without Cloudflare credentials,
+which would break local dev for everyone to add one optional panel. The scripts
+read the same names from the environment.
 
 For local dev, put them in `.dev.vars` (gitignored):
 
@@ -137,6 +205,10 @@ already wired and answers without a redirect.
    - `scripts/seed-forecasts.json` — otherwise the board opens pre-seeded with
      opinions about something else. `npm run seed` now refuses outright when
      `answersQuestion` does not match `activeFrequency`.
+   - `public/data/evidence.json` and `public/data/treatments.json` — the
+     decision engine's evidence and options. The engine routes and
+     `npm run engine` refuse an evidence pack whose `question` is not the
+     active one; the treatments' descriptions name the subject, so reread them.
 2. Dry run with 20+ real people. Keep that data:
    `node scripts/snapshot.mjs --from-live https://your.domain --token $MOD_TOKEN`
    — it becomes both the seed and the offline snapshot.
@@ -151,6 +223,9 @@ already wired and answers without a redirect.
    and that the prompt has not changed since it was made.
    **The artefact in the repo is a placeholder and the board says so in pink on
    Panel B until you replace it.**
+   `npm run engine -- --check` until the evidence and treatments pass, then
+   `npm run engine` and `npm run engine -- --decide-from-snapshot` — the same
+   placeholder rule applies on Panels B and E.
 5. `npm run check -- https://your.domain --token $MOD_TOKEN` — verifies the
    served bytes still match the repo, the aggregate leaks nothing, the snapshot
    is populated, and your moderation token actually works. Run it *before* you
@@ -168,8 +243,10 @@ already wired and answers without a redirect.
 | Key | |
 |---|---|
 | `→` / `space` | reveal the next panel |
-| `1`–`4` | jump to a panel, `0` hides all |
+| `1`–`5` | jump to a panel, `0` hides all — `5` is the decision, asked for live as it rises |
 | `R` | re-run the model live — optional theatre, 6s timeout, silent fallback |
+| `E` | re-run the decision engine's forecast live — same rules |
+| `D` | re-ask the decision on the numbers on screen now |
 | `S` | force the snapshot |
 
 **Resolution day**
@@ -289,6 +366,11 @@ notice and the policy: Cloudflare, which runs the app, and **Gmail (Google LLC)*
 which sends the outcome notice. Both sit outside Australia. If the mail provider
 ever changes, both places need updating and the notice version needs bumping.
 
+The AI decision engine adds no processor that receives personal information.
+Clef runs on Cloudflare, already named. Jev (TypeSafe) is sent only the
+question, the public evidence pack and aggregate numbers — never a forecast,
+a note, an id or an address — so using it needs no change to the notice.
+
 **Unsubscribe** is by reply rather than by one-click link, because these notices
 come from a mailbox rather than a bulk mailing platform. The policy says so
 plainly rather than promising a mechanism that does not exist.
@@ -303,19 +385,26 @@ wrangler.jsonc              assets, Durable Object, KV, vars
 src/index.js                router; everything else falls through to assets
 src/session-do.js           forecasts / emails / notes, rate limit, aggregate cache
 src/turnstile.js            fails open on a network error, on purpose
+src/engine.js               the decision engine's two live routes
 public/index.html           participant app, six screens
-public/board.html           presenter board, four panels
+public/board.html           presenter board, four panels and the decision
 public/mod.html             moderation view
 public/privacy.html         the light document surface
 public/css/tokens.css       design tokens, extracted from the deck
 public/js/aggregate.js      §7 — shared with the Worker
 public/js/montecarlo.js     §8 — FAIR chain, 10,000 iterations
+public/js/decision-engine.js  Clef/Jev adapter, evidence gate, bands, tagging
+public/js/session-epoch.js  when a phone's saved forecast belongs to a reset session
 public/data/questions.json  Q1, Q2, the backup question, resolution criteria
 public/data/model-prompt.txt  the prompt, in the repo for audit
 public/data/model.json      cached model artefact (placeholder until you run it)
+public/data/evidence.json   the engine's cited evidence (placeholder until sourced)
+public/data/treatments.json the decision's options, costs and appetite (placeholder)
+public/data/engine.json     cached engine forecast (placeholder until you run it)
+public/data/engine-decision.json  Panel E's offline fallback (placeholder)
 public/data/snapshot.json   the offline board
-scripts/                    model, seed, snapshot, qr, score
-test/                       43 tests over the maths
+scripts/                    model, engine, seed, snapshot, qr, score, check
+test/                       83 tests
 ```
 
 ## Design

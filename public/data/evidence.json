@@ -1,0 +1,67 @@
+{
+  "_comment": [
+    "Evidence for the AI decision engine. A decision model cannot look anything up and",
+    "gives no reasons, so this pack is the whole of what it knows — and it is public, so",
+    "anyone in the room can audit it.",
+    "PLACEHOLDER. Every item below says what to find, not what was found. Replace each",
+    "one with a cited, dated claim, delete the placeholder flags, then run",
+    "`npm run engine -- --check` until the gate passes. The engine is never called on a",
+    "pack that fails it. The rules are SUFFICIENCY in public/js/decision-engine.js.",
+    "Each item: part A or B, direction '+' (makes YES likelier) or '-', one-sentence claim,",
+    "an https source, and the date the claim was true as of."
+  ],
+  "placeholder": true,
+  "question": "q1ai",
+  "asOf": null,
+  "parts": {
+    "A": "An Australian organisation suffers a material security incident caused by the compromise, manipulation or misuse of an AI assistant, agent or LLM integration that it operated.",
+    "B": "That incident is publicly attributed to the organisation's own AI system — by the organisation, the OAIC, ASD/ACSC, an ASX disclosure, or two independent news reports naming it."
+  },
+  "items": [
+    {
+      "id": "a-overseas-incidents",
+      "part": "A",
+      "direction": "+",
+      "placeholder": true,
+      "claim": "FIND: how many publicly reported security incidents in the last 12 months involved an organisation's own AI agent or LLM integration being compromised or manipulated (e.g. prompt injection leading to data exposure). A count, with the tracker it came from.",
+      "source": null,
+      "asOf": null
+    },
+    {
+      "id": "a-au-agent-adoption",
+      "part": "A",
+      "direction": "+",
+      "placeholder": true,
+      "claim": "FIND: the share of Australian organisations that have deployed AI agents or LLM features with access to internal data or the ability to take actions. A survey figure, with its sample.",
+      "source": null,
+      "asOf": null
+    },
+    {
+      "id": "a-human-in-loop",
+      "part": "A",
+      "direction": "-",
+      "placeholder": true,
+      "claim": "FIND: evidence that most deployed agents are read-only or keep a human approval step for consequential actions — the thing that keeps manipulation from becoming a material incident.",
+      "source": null,
+      "asOf": null
+    },
+    {
+      "id": "b-au-root-cause-precedent",
+      "part": "B",
+      "direction": "+",
+      "placeholder": true,
+      "claim": "FIND: a recent case of an Australian organisation publicly naming a specific technology as the root cause of an incident — the precedent for attribution at this bar.",
+      "source": null,
+      "asOf": null
+    },
+    {
+      "id": "b-oaic-cause-categories",
+      "part": "B",
+      "direction": "-",
+      "placeholder": true,
+      "claim": "FIND: how the OAIC's notifiable data breach reports categorise cause, and whether any category would surface an AI system. If they do not, public attribution has to come from the organisation itself.",
+      "source": null,
+      "asOf": null
+    }
+  ]
+}

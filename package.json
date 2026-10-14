@@ -14,7 +14,8 @@
     "qr": "node scripts/make-qr.mjs",
     "score": "node scripts/score.mjs",
     "snapshot": "node scripts/snapshot.mjs",
-    "check": "node scripts/check-deploy.mjs"
+    "check": "node scripts/check-deploy.mjs",
+    "engine": "node scripts/decision-engine.mjs"
   },
   "devDependencies": {
     "qrcode": "^1.5.4",

@@ -65,7 +65,7 @@
     <section class="panel" id="panelB" data-panel="2">
       <div class="panel__head">
         <p class="marker marker--cyan">B</p>
-        <p class="eyebrow eyebrow--cyan">The model</p>
+        <p class="eyebrow eyebrow--cyan">The models</p>
       </div>
 
       <div class="panel__body model">
@@ -77,6 +77,23 @@
           <p class="participant__base" id="modelBase">—</p>
         </div>
         <ul class="reasons reasons--model" id="modelReasons"></ul>
+
+        <!-- The AI decision engine (Clef or Jev): a second machine participant,
+             tagged as such, and shown beside the LLM rather than blended into
+             the ensemble. It gives no reasons, so it shows what moved it. -->
+        <div class="engine" id="engineBlock" hidden>
+          <p class="tag">AI decision engine</p>
+          <div class="engine__row">
+            <p class="engine__p num" id="engineP">—</p>
+            <div class="engine__who">
+              <p class="participant__role" id="engineName">Decision engine</p>
+              <p class="engine__parts" id="engineParts"></p>
+            </div>
+          </div>
+          <ul class="engine__moved" id="engineMoved"></ul>
+          <p class="engine__stamp" id="engineStamp"></p>
+        </div>
+
         <p class="stamp" id="modelStamp"></p>
       </div>
     </section>
@@ -99,6 +116,7 @@
             <div class="band__range" id="bandRange"></div>
             <div class="band__tick band__tick--crowd" id="tickCrowd" title="Crowd"></div>
             <div class="band__tick band__tick--model" id="tickModel" title="Model"></div>
+            <div class="band__tick band__tick--engine" id="tickEngine" title="AI decision engine"></div>
             <div class="band__tick band__tick--ens" id="tickEns" title="Ensemble"></div>
           </div>
           <div class="band__axis"><span>0%</span><span>50%</span><span>100%</span></div>
@@ -106,6 +124,7 @@
             <span class="key key--pink">Crowd</span>
             <span class="key key--cyan">Model</span>
             <span class="key key--white">Ensemble</span>
+            <span class="key key--engine" id="keyEngine" hidden>Engine</span>
           </div>
         </div>
 
@@ -151,6 +170,31 @@
       </div>
     </section>
 
+    <!-- PANEL E — THE DECISION. Rises over the foot of the board after the
+         money, so the four panels above never reflow mid-talk. -->
+    <section class="decision" id="panelE" data-panel="5" aria-live="polite">
+      <div class="decision__head">
+        <p class="marker marker--cyan">E</p>
+        <p class="eyebrow eyebrow--cyan">The decision</p>
+        <p class="tag">AI decision engine</p>
+        <p class="decision__engine" id="decisionEngine"></p>
+      </div>
+      <div class="decision__body">
+        <div class="decision__verdict">
+          <p class="decision__band" id="decisionBand">—</p>
+          <p class="decision__choice" id="decisionChoice">—</p>
+          <p class="decision__desc" id="decisionDesc"></p>
+        </div>
+        <div class="decision__bars" id="decisionBars"></div>
+        <div class="decision__meta">
+          <p class="decision__conf" id="decisionConf"></p>
+          <p id="decisionInputs"></p>
+          <p class="decision__rule" id="decisionRule"></p>
+          <p class="decision__stamp" id="decisionStamp"></p>
+        </div>
+      </div>
+    </section>
+
   </div>
 
   <footer class="botbar">
@@ -159,7 +203,7 @@
   </footer>
 
   <div class="hint-keys" id="hintKeys">
-    <span><b>→</b> reveal</span><span><b>1–4</b> jump</span><span><b>R</b> re-run model</span><span><b>S</b> snapshot</span>
+    <span><b>→</b> reveal</span><span><b>1–5</b> jump</span><span><b>R</b> re-run model</span><span><b>E</b> re-run engine</span><span><b>D</b> re-decide</span><span><b>S</b> snapshot</span>
   </div>
 </div>
 

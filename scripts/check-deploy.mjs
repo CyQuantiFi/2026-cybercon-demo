@@ -82,7 +82,7 @@ try {
 } catch {
   ok(false, '/api/agg returns valid JSON');
 }
-const expected = 'byConfidence,byRole,crowd,divergence,ensemble,epoch,magnitude,method,model,n,notes,seeded,updated';
+const expected = 'byConfidence,byRole,crowd,divergence,engine,ensemble,epoch,magnitude,method,model,n,notes,seeded,updated';
 ok(Object.keys(agg).sort().join() === expected, 'aggregate carries exactly the documented keys');
 
 // The board is a screen in front of 150 people. Nothing in the payload it polls
@@ -93,6 +93,9 @@ ok(leaks.length === 0, 'aggregate contains no participant fields', leaks.length 
 ok(!!aggRes.headers.get('etag'), 'aggregate sends an ETag so the 2s poll is cheap');
 if (agg.model?.placeholder) {
   console.log('  WARN  model artefact is still the PLACEHOLDER — run `npm run model`, then `npm run snapshot`');
+}
+if (agg.engine?.placeholder) {
+  console.log('  WARN  AI decision engine artefact is still the PLACEHOLDER — `npm run engine -- --check`');
 }
 console.log(`        n=${agg.n} seeded=${agg.seeded} notes=${agg.notes?.length ?? 0}`);
 

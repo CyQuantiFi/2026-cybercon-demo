@@ -1,7 +1,7 @@
 /* ---------------------------------------------------------------------------
    Presenter board — §4.
 
-   Four panels revealed by keypress so the reveal matches the narration, and a
+   Five panels revealed by keypress so the reveal matches the narration, and a
    2-second poll against /api/agg. Polling rather than WebSockets, deliberately:
    it survives flaky venue Wi-Fi and needs no reconnect logic. A poll that fails
    is simply a poll that failed; the next one is two seconds away.
@@ -12,6 +12,7 @@
 
 import { HISTOGRAM_BINS } from './aggregate.js';
 import { runFairChain, formatAud } from './montecarlo.js';
+import { BANDS, SUFFICIENCY } from './decision-engine.js';
 
 const $ = (id) => document.getElementById(id);
 const params = new URLSearchParams(location.search);
@@ -30,7 +31,11 @@ const state = {
   lastN: 0,
   lastChangeAt: 0,
   noteCursor: 0,
-  notesKey: null
+  notesKey: null,
+  /** Panel E. Asked for when it is revealed, not on every poll — see requestDecision. */
+  decision: null,
+  decisionFallback: null,
+  treatments: null
 };
 
 boot();
@@ -39,15 +44,22 @@ async function boot() {
   fitToViewport();
   window.addEventListener('resize', fitToViewport);
 
-  const [questions, snapshot] = await Promise.all([
-    fetch('data/questions.json', { cache: 'no-store' }).then((r) => r.json()),
-    fetch('data/snapshot.json', { cache: 'no-store' })
+  const optional = (name) =>
+    fetch(`data/${name}`, { cache: 'no-store' })
       .then((r) => r.json())
-      .catch(() => null)
+      .catch(() => null);
+
+  const [questions, snapshot, decisionFallback, treatments] = await Promise.all([
+    fetch('data/questions.json', { cache: 'no-store' }).then((r) => r.json()),
+    optional('snapshot.json'),
+    optional('engine-decision.json'),
+    optional('treatments.json')
   ]);
 
   state.questions = questions;
   state.snapshot = snapshot;
+  state.decisionFallback = decisionFallback;
+  state.treatments = treatments;
   const activeQ = questions.frequency[questions.activeFrequency];
   $('questionText').textContent = activeQ.display ?? activeQ.text;
 
@@ -89,7 +101,7 @@ function wireKeys() {
     } else if (e.key === 'ArrowLeft' || e.key === 'PageUp') {
       e.preventDefault();
       reveal(state.revealed - 1);
-    } else if (['1', '2', '3', '4'].includes(e.key)) {
+    } else if (['1', '2', '3', '4', '5'].includes(e.key)) {
       reveal(Number(e.key));
     } else if (e.key === '0') {
       reveal(0);
@@ -97,16 +109,24 @@ function wireKeys() {
       rerunModel();
     } else if (e.key.toLowerCase() === 's') {
       applySnapshot();
+    } else if (e.key.toLowerCase() === 'e') {
+      rerunEngine();
+    } else if (e.key.toLowerCase() === 'd') {
+      requestDecision();
     }
   });
 }
 
 function reveal(n) {
-  state.revealed = Math.max(0, Math.min(4, n));
-  for (const id of ['panelA', 'panelB', 'panelC', 'panelD']) {
+  const before = state.revealed;
+  state.revealed = Math.max(0, Math.min(5, n));
+  for (const id of ['panelA', 'panelB', 'panelC', 'panelD', 'panelE']) {
     const el = $(id);
     el.dataset.revealed = Number(el.dataset.panel) <= state.revealed ? '1' : '0';
   }
+  // Ask for the decision as the panel comes up, so it is made on the numbers
+  // the room is looking at right then.
+  if (state.revealed === 5 && before < 5) requestDecision();
 }
 
 /* --- data ------------------------------------------------------------------- */
@@ -169,6 +189,7 @@ function render() {
   renderTopBar(a);
   renderCrowd(a);
   renderModel(a);
+  renderEngine(a);
   renderEnsemble(a);
   renderMoney(a);
 
@@ -293,8 +314,10 @@ function renderModel(a) {
     return;
   }
   $('modelStamp').style.color = '';
+  // With the engine on the same panel, say whose stamp this is.
+  const who = a.engine ? 'LLM · ' : '';
   $('modelStamp').textContent = m.ranAt
-    ? `${m.live ? 'Re-run live' : 'Pre-computed'} ${new Date(m.ranAt).toLocaleString('en-AU', { dateStyle: 'medium', timeStyle: 'short' })} · one participant among ${a.n}, not a tiebreaker`
+    ? `${who}${m.live ? 'Re-run live' : 'Pre-computed'} ${new Date(m.ranAt).toLocaleString('en-AU', { dateStyle: 'medium', timeStyle: 'short' })} · one participant among ${a.n}, not a tiebreaker`
     : 'One participant among many, not a tiebreaker';
 }
 
@@ -306,7 +329,8 @@ function renderEnsemble(a) {
   const w = e.weights;
   $('weights').textContent =
     `Weights fixed at ${w.crowd * 100}/${w.model * 100}. Nobody here has a track record yet — ` +
-    'the production system weights by resolved accuracy, and this one cannot, because it has no history.';
+    'the production system weights by resolved accuracy, and this one cannot, because it has no history.' +
+    (a.engine ? ' The AI decision engine is marked on the band, not blended in.' : '');
 
   const place = (id, p) => {
     const el = $(id);
@@ -324,7 +348,9 @@ function renderEnsemble(a) {
   }
   place('tickCrowd', a.crowd.median);
   place('tickModel', a.model?.p);
+  place('tickEngine', a.engine?.p);
   place('tickEns', e.p);
+  $('keyEngine').hidden = a.engine?.p == null;
 }
 
 function renderMoney(a) {
@@ -416,6 +442,156 @@ function drawCurve(run) {
       return span;
     })
   );
+}
+
+/* --- the AI decision engine: Panel B ------------------------------------------- */
+
+function renderEngine(a) {
+  const e = a.engine;
+  const block = $('engineBlock');
+  block.hidden = !e;
+  block.parentElement.dataset.engine = e ? '1' : '0';
+  if (!e) return;
+
+  const src = e.source ?? {};
+  $('engineP').textContent = pct(e.p);
+  $('engineName').textContent = `${src.engineLabel ?? 'Decision engine'} · ${src.vendor ?? ''}`.replace(/ · $/, '');
+
+  const parts = e.parts ?? {};
+  $('engineParts').textContent =
+    parts.a != null && parts.bGivenA != null
+      ? `Incident ${pct(parts.a)} × then attributed ${pct(parts.bGivenA)}` +
+        (e.consistency?.ok === false ? ' — the whole disagrees with its parts' : '')
+      : 'A calibrated probability. No prose, no reasons — just what the evidence supports.';
+
+  // In place of reasons: the evidence that moved it most when withheld.
+  $('engineMoved').replaceChildren(
+    ...(e.attribution ?? []).map((m) => {
+      const li = document.createElement('li');
+      const b = document.createElement('b');
+      b.textContent = `${m.delta > 0 ? '+' : '−'}${Math.abs(Math.round(m.delta * 100))} pts`;
+      li.append(b, m.claim);
+      return li;
+    })
+  );
+
+  const stamp = $('engineStamp');
+  if (e.placeholder) {
+    stamp.textContent = 'PLACEHOLDER — evidence not yet sourced. Run `npm run engine -- --check`.';
+    stamp.style.color = 'var(--pink)';
+    return;
+  }
+  stamp.style.color = '';
+  const when = src.ranAt ? new Date(src.ranAt).toLocaleString('en-AU', { dateStyle: 'medium', timeStyle: 'short' }) : '';
+  const cross = e.crossCheck ? ` · ${e.crossCheck.engineLabel} says ${pct(e.crossCheck.p)}` : '';
+  stamp.textContent =
+    `${src.live ? 'Re-run live' : 'Pre-computed'} ${when} · ${e.evidence?.n ?? '?'} cited items, ` +
+    `≥${SUFFICIENCY.minPerPart} a part, ≤${SUFFICIENCY.maxAgeMonths} months old${cross}`;
+}
+
+async function rerunEngine() {
+  if (state.source === 'snapshot' || OFFLINE) return;
+  setStatus('Re-running the decision engine…');
+  try {
+    const res = await fetch('/api/engine/rerun', { method: 'POST' });
+    const data = await res.json();
+    // Same rule as the model: never an error on screen. The artefact stays up.
+    setStatus(data.ok ? 'Decision engine re-run complete' : '');
+    state.etag = null;
+    await poll();
+  } catch {
+    setStatus('');
+  }
+}
+
+/* --- the AI decision engine: Panel E ------------------------------------------- */
+
+/**
+ * Ask the engine what to do about Panel D. Live first; on any failure, offline,
+ * or on the snapshot, the pre-computed decision — which was itself made on the
+ * snapshot's numbers, so it is never shown against a room it did not see
+ * without saying so.
+ */
+async function requestDecision() {
+  if (!OFFLINE && state.source !== 'snapshot') {
+    try {
+      const res = await fetch('/api/engine/decide', { method: 'POST' });
+      const data = await res.json();
+      if (data.ok && data.decision) {
+        state.decision = data.decision;
+        renderDecision();
+        return;
+      }
+    } catch {
+      /* fall through to the artefact */
+    }
+  }
+  state.decision = state.decisionFallback;
+  renderDecision();
+}
+
+function renderDecision() {
+  const d = state.decision;
+  const options = state.treatments?.options ?? {};
+  const src = d?.source ?? {};
+
+  $('decisionEngine').textContent = src.engineLabel ? `${src.engineLabel} · ${src.vendor}` : '';
+  $('decisionRule').textContent =
+    `Act at confidence ≥ ${BANDS.act.toFixed(2)} · review ≥ ${BANDS.review.toFixed(2)} · below that, a person decides.`;
+
+  if (!d || d.placeholder || !d.choice) {
+    $('decisionBand').textContent = 'Expert required';
+    $('decisionBand').dataset.band = 'human';
+    $('decisionChoice').textContent = '—';
+    $('decisionDesc').textContent = 'No sourced treatments yet, so the engine has not been asked.';
+    $('decisionBars').replaceChildren();
+    $('decisionConf').textContent = '';
+    $('decisionInputs').textContent = '';
+    $('decisionStamp').textContent = 'PLACEHOLDER — run `npm run engine -- --check`.';
+    $('decisionStamp').style.color = 'var(--pink)';
+    return;
+  }
+
+  $('decisionBand').textContent = (d.bandLabel ?? '').split(' — ')[0] || d.band;
+  $('decisionBand').dataset.band = d.band;
+  $('decisionChoice').textContent = d.choice;
+  $('decisionDesc').textContent = options[d.choice]?.description ?? '';
+
+  const entries = Object.keys(options).length ? Object.keys(options) : Object.keys(d.probabilities ?? {});
+  $('decisionBars').replaceChildren(
+    ...entries.map((key) => {
+      const p = d.probabilities?.[key] ?? 0;
+      const row = document.createElement('div');
+      row.className = 'dbar';
+      row.dataset.chosen = key === d.choice ? '1' : '0';
+      const name = document.createElement('span');
+      name.textContent = key;
+      const track = document.createElement('div');
+      track.className = 'dbar__track';
+      const fill = document.createElement('div');
+      fill.className = 'dbar__fill';
+      fill.style.width = `${Math.round(p * 100)}%`;
+      track.append(fill);
+      const val = document.createElement('span');
+      val.className = 'dbar__val num';
+      val.textContent = pct(p);
+      row.append(name, track, val);
+      return row;
+    })
+  );
+
+  $('decisionConf').textContent =
+    d.confidence == null ? 'No confidence given — so a person decides' : `Confidence ${d.confidence.toFixed(2)}`;
+  const i = d.inputs;
+  $('decisionInputs').textContent = i
+    ? `On ${pct(i.ensembleP)} a year · expected ${formatAud(i.mean)} · 90th percentile ${formatAud(i.p90)}`
+    : '';
+
+  $('decisionStamp').style.color = '';
+  const when = src.ranAt ? new Date(src.ranAt).toLocaleString('en-AU', { dateStyle: 'medium', timeStyle: 'short' }) : '';
+  $('decisionStamp').textContent = src.live
+    ? `Decided live ${when} on the numbers above`
+    : `Pre-computed ${when}${i?.fromSnapshot ? ' on the dry-run snapshot’s numbers, not this room’s' : ''}`;
 }
 
 /* --- optional live re-run of the model -------------------------------------- */

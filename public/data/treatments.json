@@ -1,0 +1,42 @@
+{
+  "_comment": [
+    "The options the AI decision engine chooses between on Panel E, for the active question.",
+    "PLACEHOLDER. Every cost, every lossReduction and the risk appetite must be a figure",
+    "you can defend, with a source, before the engine is shown them — the decision is only",
+    "as good as these numbers, and they are on screen. The harness computes expected loss",
+    "avoided, return on spend and residual 90th percentile from these, so the engine",
+    "judges rather than does arithmetic.",
+    "annualCost is AUD a year. lossReduction is the fraction of annual loss the option",
+    "removes (0 to 1). Run `npm run engine -- --check` to see what is still missing."
+  ],
+  "placeholder": true,
+  "organisation": "Mid-size Australian organisation, 500–2,000 staff",
+  "appetite": {
+    "p90Max": null,
+    "note": "SET: the 90th-percentile annual loss the reference organisation's board would accept without further action."
+  },
+  "options": {
+    "accept": {
+      "description": "Accept the risk as it stands. No new spend; keep monitoring.",
+      "annualCost": 0,
+      "lossReduction": 0
+    },
+    "mitigate": {
+      "description": "Constrain the organisation's AI agents: least-privilege tool scopes, human approval for consequential actions, and prompt-injection testing before release.",
+      "annualCost": null,
+      "lossReduction": null,
+      "source": null
+    },
+    "transfer": {
+      "description": "Transfer it: a cyber policy with explicit cover for incidents caused by the organisation's own AI systems.",
+      "annualCost": null,
+      "lossReduction": null,
+      "source": null
+    },
+    "escalate": {
+      "description": "Escalate to the board as a risk-appetite decision before choosing a treatment.",
+      "annualCost": 0,
+      "lossReduction": 0
+    }
+  }
+}

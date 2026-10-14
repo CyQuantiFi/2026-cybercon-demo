@@ -1,0 +1,20 @@
+{
+  "_comment": "PLACEHOLDER. Overwritten by `npm run engine -- --decide-from-snapshot` once public/data/treatments.json passes its gate. Panel E falls back to this when the live /api/engine/decide call fails or the board is offline, so it is computed from the bundled snapshot's numbers and says so.",
+  "placeholder": true,
+  "choice": null,
+  "probabilities": {},
+  "confidence": null,
+  "band": "human",
+  "bandLabel": "Expert required — routed to a person",
+  "inputs": null,
+  "source": {
+    "kind": "ai-decision-engine",
+    "label": "AI decision engine",
+    "engine": "clef",
+    "engineLabel": "Clef",
+    "vendor": "Cloudflare",
+    "model": "@cf/cloudflare/clef",
+    "ranAt": 0,
+    "live": false
+  }
+}

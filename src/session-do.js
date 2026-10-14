@@ -16,6 +16,7 @@
 
 import { DurableObject } from 'cloudflare:workers';
 import { buildAggregate } from '../public/js/aggregate.js';
+import { engineSummary } from '../public/js/decision-engine.js';
 
 /**
  * Per-IP limit on *new* forecasts (§9, spam / ballot stuffing).
@@ -70,11 +71,13 @@ export class SessionDO extends DurableObject {
     this.authFails = new Map();
     this.aggregate = null;
     this.model = null;
+    this.engine = null;
 
     ctx.blockConcurrencyWhile(async () => {
       this.migrate();
       this.loadEpoch();
       await this.loadModel();
+      await this.loadEngine();
       this.recompute();
     });
   }
@@ -185,6 +188,44 @@ export class SessionDO extends DurableObject {
     this.sql.exec('INSERT OR REPLACE INTO meta (k, v) VALUES (?, ?)', 'model', JSON.stringify(model));
   }
 
+  /**
+   * The AI decision engine's forecast, on exactly the model's rules: the
+   * deployed data/engine.json is authoritative on boot, and a live re-run from
+   * the board stands until the instance is evicted or the session is reset.
+   */
+  async loadEngine() {
+    let cached = null;
+    const stored = this.sql.exec('SELECT v FROM meta WHERE k = ?', 'engine').toArray();
+    if (stored.length > 0) {
+      try {
+        cached = JSON.parse(stored[0].v);
+      } catch {
+        /* corrupt cache; the asset below replaces it */
+      }
+    }
+
+    let asset = null;
+    try {
+      const res = await this.env.ASSETS.fetch('https://assets.local/data/engine.json');
+      if (res.ok) asset = await res.json();
+    } catch (err) {
+      // Not fatal. The engine is an addition to Panel B, not part of the ensemble.
+      console.error('could not load cached engine artefact', err);
+    }
+
+    const ranAt = (a) => a?.source?.ranAt;
+    if (asset && (!cached || ranAt(asset) !== ranAt(cached) || asset.p !== cached.p)) {
+      this.setEngine(asset);
+      return;
+    }
+    this.engine = cached ?? asset;
+  }
+
+  setEngine(engine) {
+    this.engine = engine;
+    this.sql.exec('INSERT OR REPLACE INTO meta (k, v) VALUES (?, ?)', 'engine', JSON.stringify(engine));
+  }
+
   async fetch(request) {
     const path = new URL(request.url).pathname;
 
@@ -194,6 +235,7 @@ export class SessionDO extends DurableObject {
     if (path === '/approve') return this.approve(request);
     if (path === '/export') return this.export(request);
     if (path === '/model') return this.storeModel(request);
+    if (path === '/engine') return this.storeEngine(request);
     if (path === '/counts') return this.json(this.counts());
     if (path === '/authfail') return this.authFail(request);
     if (path === '/reset') return this.reset();
@@ -289,6 +331,12 @@ export class SessionDO extends DurableObject {
     return this.json({ ok: true, model: this.aggregate.model });
   }
 
+  async storeEngine(request) {
+    this.setEngine(await request.json());
+    this.recompute();
+    return this.json({ ok: true, engine: this.aggregate.engine });
+  }
+
   /* --- reads ------------------------------------------------------------ */
 
   recompute() {
@@ -308,7 +356,13 @@ export class SessionDO extends DurableObject {
       .toArray()
       .map((r) => ({ note: r.note, role: r.role, q1: r.q1, ts: r.ts }));
 
-    this.aggregate = { ...buildAggregate(forecasts, this.model, notes), epoch: this.epoch };
+    // The engine rides alongside the aggregate rather than inside the ensemble:
+    // shown beside the crowd and the LLM, never blended in.
+    this.aggregate = {
+      ...buildAggregate(forecasts, this.model, notes),
+      engine: engineSummary(this.engine),
+      epoch: this.epoch
+    };
     return this.aggregate;
   }
 
@@ -329,7 +383,8 @@ export class SessionDO extends DurableObject {
       exportedAt: Date.now(),
       forecasts: this.sql.exec('SELECT * FROM forecasts ORDER BY ts ASC').toArray(),
       notes: this.allNotes(),
-      model: this.model
+      model: this.model,
+      engine: this.engine
     };
     if (includeContacts) {
       payload.contacts = this.sql.exec('SELECT * FROM emails ORDER BY ts ASC').toArray();
@@ -361,9 +416,9 @@ export class SessionDO extends DurableObject {
    * exist, and the resolution-day job would then email people about a question
    * whose answers were deleted.
    *
-   * The model artefact survives, because it is not session data — it is the
-   * output of the run you did that morning, and losing it would mean running
-   * the model again for no reason.
+   * The model and engine artefacts survive, because they are not session data —
+   * they are the output of the runs you did that morning, and losing them would
+   * mean running both again for no reason.
    */
   async reset() {
     const before = this.counts();
@@ -378,7 +433,9 @@ export class SessionDO extends DurableObject {
     // session to what the deployment says rather than keeping a live re-run
     // from an earlier rehearsal.
     this.sql.exec('DELETE FROM meta WHERE k = ?', 'model');
+    this.sql.exec('DELETE FROM meta WHERE k = ?', 'engine');
     await this.loadModel();
+    await this.loadEngine();
 
     // New epoch, so phones still holding a forecast from the old session send
     // themselves back to the question rather than sitting on a submitted screen

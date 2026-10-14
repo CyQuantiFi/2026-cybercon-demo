@@ -8,9 +8,10 @@
        POST /api/f     append (or edit in place) a forecast
        GET  /api/agg   read the aggregate
 
-   Three more exist off the hot path and are not part of that budget: the
+   More exist off the hot path and are not part of that budget: the
    moderation view's routes, which are token-gated and used by one phone in the
-   presenter's pocket, and the optional live model re-run.
+   presenter's pocket, the optional live model re-run, and the AI decision
+   engine's two routes in src/engine.js.
 
    The maths lives in public/js/aggregate.js and is imported by both this Worker
    and the board, so there is exactly one implementation of §7 in the repo.
@@ -19,6 +20,7 @@
 import { SessionDO } from './session-do.js';
 import { verifyTurnstile } from './turnstile.js';
 import { secretEquals } from './auth.js';
+import { engineRoute } from './engine.js';
 
 export { SessionDO };
 
@@ -37,6 +39,9 @@ export default {
       if (path === '/api/agg' && request.method === 'GET') return await readAggregate(request, env);
       if (path.startsWith('/api/mod/')) return await moderation(request, env, path);
       if (path === '/api/model/rerun' && request.method === 'POST') return await rerunModel(request, env, ctx);
+      if (path.startsWith('/api/engine/') && request.method === 'POST') {
+        return await engineRoute(request, env, path, sessionStub(env));
+      }
       if (path.startsWith('/api/')) return json({ error: 'not_found' }, 404);
     } catch (err) {
       // Never let a stack trace reach a phone. The board's failure path is to

@@ -108,6 +108,7 @@
 /* --- the four panels --------------------------------------------------------- */
 
 .panels {
+  position: relative;
   flex: 1;
   display: grid;
   grid-template-columns: repeat(4, 1fr);
@@ -345,6 +346,109 @@
   vertical-align: 0.15em;
 }
 
+/* --- the AI decision engine ------------------------------------------------------
+   Its own tag wherever it appears, so no one in the room mistakes it for the
+   crowd or the LLM. Machines stay in the cyan family; the engine takes the deep
+   cyan so the two machines read as related but distinct. No new colours — every
+   token here is from the deck. */
+
+.tag {
+  display: inline-block;
+  align-self: flex-start;
+  margin: 0;
+  padding: 4px 10px;
+  border: 1px solid var(--cyan);
+  border-radius: 4px;
+  font-size: 13px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: var(--track-eyebrow);
+  color: var(--cyan);
+}
+
+/* With the engine on Panel B, the LLM gives up some height so both fit the
+   fixed 1080px — clamped rather than pushed below the fold. */
+.model[data-engine='1'] .participant { padding-bottom: 12px; }
+.model[data-engine='1'] .participant__p { font-size: 64px; }
+.model[data-engine='1'] .participant__base,
+.model[data-engine='1'] .reasons--model .reasons__item {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+/* Bottom spacing as margin, not padding: a line-clamped box still paints the
+   next line into its own padding, which reads as a ghost of cut-off text. */
+.model[data-engine='1'] .reasons--model .reasons__item { font-size: 16px; padding: 8px 0 0; margin-bottom: 8px; -webkit-line-clamp: 3; }
+.model[data-engine='1'] .reasons--model .reasons__item::before { display: none; }
+.model[data-engine='1'] .stamp { padding-top: 10px; font-size: 13px; }
+
+.engine {
+  display: flex;
+  flex-direction: column;
+  padding-top: 18px;
+  margin-top: 6px;
+  border-top: 1px solid var(--hairline);
+}
+
+.engine[hidden] { display: none; }
+
+.engine__row {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  margin-top: 12px;
+}
+
+.engine__p {
+  font-size: 56px;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  line-height: 1;
+  color: var(--cyan-deep);
+  margin: 0;
+}
+
+.engine__who { min-width: 0; }
+.engine__who .participant__role { margin: 0 0 4px; }
+
+.engine__parts {
+  font-size: 16px;
+  line-height: 1.3;
+  color: var(--fg-4);
+  margin: 0;
+}
+
+.engine__moved {
+  list-style: none;
+  margin: 12px 0 0;
+  padding: 0;
+}
+
+.engine__moved li {
+  font-size: 15px;
+  line-height: 1.35;
+  color: var(--fg-3);
+  margin: 6px 0;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.engine__moved b {
+  color: var(--cyan);
+  font-weight: 700;
+  margin-right: 8px;
+}
+
+.engine__stamp {
+  font-size: 13px;
+  line-height: 1.35;
+  color: var(--muted-3);
+  margin: 8px 0 0;
+}
+
 .stamp {
   margin-top: auto;
   font-size: 15px;
@@ -387,6 +491,8 @@
 
 .band__tick--crowd { background: var(--pink); }
 .band__tick--model { background: var(--cyan); }
+/* Hollow, because it is shown on the band but not blended into it. */
+.band__tick--engine { background: transparent; border: 2px solid var(--cyan-deep); width: 8px; margin-left: -4px; }
 .band__tick--ens { background: var(--paper); width: 6px; height: 48px; top: -13px; margin-left: -3px; }
 
 .band__axis {
@@ -400,14 +506,15 @@
 
 .band__legend {
   display: flex;
-  gap: 18px;
+  flex-wrap: wrap;
+  gap: 8px 18px;
   margin-top: 14px;
   font-size: 14px;
   text-transform: uppercase;
   letter-spacing: var(--track-eyebrow);
 }
 
-.key { color: var(--fg-4); }
+.key { color: var(--fg-4); white-space: nowrap; }
 .key::before {
   content: '';
   display: inline-block;
@@ -419,6 +526,8 @@
 .key--pink::before { background: var(--pink); }
 .key--cyan::before { background: var(--cyan); }
 .key--white::before { background: var(--paper); }
+.key--engine::before { border: 2px solid var(--cyan-deep); width: 8px; height: 8px; }
+.key[hidden] { display: none; }
 
 .diverge {
   font-size: 19px;
@@ -528,6 +637,115 @@
   color: var(--pink-deep);
   margin: 14px 0 0;
 }
+
+/* --- panel E: the decision ---------------------------------------------------------
+   A fifth reveal that rises over the foot of the four panels. By this point in
+   the narration the room's reasoning lines and the curve caption have done
+   their job, and covering them keeps the layout above from ever moving. */
+
+.decision {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 324px;
+  background: var(--ink-deep);
+  border-top: 2px solid var(--cyan);
+  padding: 22px 26px 18px;
+  display: flex;
+  flex-direction: column;
+
+  opacity: 0;
+  transform: translateY(40px);
+  transition: opacity 520ms cubic-bezier(0.2, 0.7, 0.3, 1), transform 520ms cubic-bezier(0.2, 0.7, 0.3, 1);
+  pointer-events: none;
+}
+
+.decision[data-revealed='1'] {
+  opacity: 1;
+  transform: none;
+  pointer-events: auto;
+}
+
+.decision__head {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--hairline);
+}
+
+.decision__head .marker { font-size: 26px; margin: 0; }
+.decision__head .eyebrow { font-size: 18px; margin: 0; color: var(--cyan); }
+.decision__engine { margin: 0 0 0 auto; font-size: 15px; color: var(--muted-3); }
+
+.decision__body {
+  flex: 1;
+  display: grid;
+  grid-template-columns: 1.1fr 1.5fr 1fr;
+  gap: 48px;
+  padding-top: 18px;
+  min-height: 0;
+}
+
+.decision__band {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: var(--track-eyebrow);
+  color: var(--fg-3);
+}
+
+/* Act is the ensemble's white; review is the machines' cyan; a hand-off to a
+   person is pink, because pink has meant the humans in the room all along. */
+.decision__band[data-band='act'] { color: var(--paper); }
+.decision__band[data-band='review'] { color: var(--cyan); }
+.decision__band[data-band='human'] { color: var(--pink); }
+
+.decision__choice {
+  margin: 8px 0 6px;
+  font-size: 64px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1;
+  color: var(--paper);
+  text-transform: capitalize;
+}
+
+.decision__desc {
+  margin: 0;
+  font-size: 17px;
+  line-height: 1.35;
+  color: var(--fg-3);
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.decision__bars { display: flex; flex-direction: column; justify-content: center; gap: 12px; }
+
+.dbar {
+  display: grid;
+  grid-template-columns: 130px 1fr 64px;
+  align-items: center;
+  gap: 16px;
+  font-size: 17px;
+  color: var(--fg-3);
+  text-transform: capitalize;
+}
+
+.dbar__track { height: 18px; background: rgba(255, 255, 255, 0.07); border-radius: 9px; overflow: hidden; }
+.dbar__fill { height: 100%; background: var(--cyan-deep); border-radius: 9px; transition: width 420ms cubic-bezier(0.2, 0.7, 0.3, 1); }
+.dbar[data-chosen='1'] { color: var(--paper); font-weight: 700; }
+.dbar[data-chosen='1'] .dbar__fill { background: var(--cyan); }
+.dbar__val { text-align: right; }
+
+.decision__meta p { margin: 0 0 8px; font-size: 15px; line-height: 1.4; color: var(--fg-4); }
+.decision__meta .decision__conf { font-size: 22px; color: var(--fg-2); }
+.decision__meta .decision__rule { color: var(--muted-3); }
+.decision__meta .decision__stamp { color: var(--muted-3); font-size: 13px; }
 
 /* --- bottom bar -------------------------------------------------------------------- */
 
