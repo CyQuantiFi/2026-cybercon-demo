@@ -13,6 +13,7 @@
 
 import { clampP, HISTOGRAM_BINS } from './aggregate.js';
 import { formatAud } from './montecarlo.js';
+import { isStaleForecast } from './session-epoch.js';
 
 const STORE_KEY = 'cyq.forecast.v1';
 const SCREENS = ['question', 'reasoning', 'magnitude', 'role', 'done', 'live'];
@@ -434,8 +435,9 @@ function stopPolling() {
  * as stale for the same reason: we cannot show it is still in the session.
  */
 function discardIfSessionReset(aggregate) {
-  if (!state.submitted || !aggregate || !aggregate.epoch) return false;
-  if (state.epoch === aggregate.epoch) return false;
+  if (!aggregate) return false;
+  const phone = { submitted: state.submitted, epoch: state.epoch, pending: readQueue().length };
+  if (!isStaleForecast(phone, aggregate.epoch)) return false;
 
   try {
     localStorage.removeItem(STORE_KEY);
